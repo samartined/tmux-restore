@@ -74,10 +74,13 @@ folder when that trust wasn't saved, and waits there, out of reach of the Claude
   lasts for this session only"), so a session working in `$HOME` asks after every restore. With
   `set -g @tmux-restore-trust-home 'on'` (the installer writes it with
   `TMUX_RESTORE_TRUST_HOME=1`), tmux-restore answers "Yes, I trust this folder" for 2 minutes after
-  a restore, only in panes working in `$HOME` that show exactly that prompt for `$HOME`, and logs
-  each one in `~/.local/state/tmux-restore/trust.log`. That trust only covers what Claude Code
+  a restore, only in panes working in `$HOME` that show exactly that prompt for `$HOME` and run a
+  `claude` that reopens a given conversation (`--resume <id>`), and logs each one in `~/.local/state/tmux-restore/trust.log`. That trust only covers what Claude Code
   already loads from your home folder anyway (your own `~/.claude`), and anyone who can write
-  there can already change your shell's startup files. Off by default.
+  there can already change your shell's startup files. Off by default. A `claude` with no
+  conversation to reopen (plain, or `--continue`, saved when its own wasn't known) is left at the
+  prompt: in `$HOME` it would open whichever conversation was last there, maybe one already open
+  in another pane.
 - **A folder added with `--add-dir`** that isn't in a trusted repository: Claude Code asks for
   it on every start. Trust its repository once for good: answer the prompt, or set
   `projects["<repository root>"].hasTrustDialogAccepted` to `true` in `~/.claude.json`.
