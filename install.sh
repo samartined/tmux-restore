@@ -22,6 +22,9 @@ set -euo pipefail
 RESTORE_URL=${TMUX_RESTORE_SOURCE:-https://github.com/samartined/tmux-restore}
 RESTORE_PLUGIN=samartined/tmux-restore # how the tmux config names it for TPM
 RESTORE_REF=${TMUX_RESTORE_REF:-}
+# TMUX_RESTORE_TRUST_HOME=1: after a restore, answer Claude Code's home-folder trust prompt in the
+# restored panes (@tmux-restore-trust-home, scripts/trust-home.sh). Off unless asked for.
+TRUST_HOME=${TMUX_RESTORE_TRUST_HOME:-}
 RESURRECT_URL=https://github.com/andrewboldi/tmux-resurrect
 RESURRECT_BRANCH=fix-concurrent-restore
 BEGIN="# >>> tmux-restore >>>"
@@ -250,6 +253,10 @@ edit_conf() {
 		block+="set -g @continuum-boot 'on'"$'\n'
 		BOOT=1
 	fi
+	if [ "$TRUST_HOME" = 1 ] &&
+		! grep -Eq '^[[:space:]]*set(-option)?[[:space:]]+(-g[[:space:]]+)?@tmux-restore-trust-home[[:space:]]' "$tmp"; then
+		block+="set -g @tmux-restore-trust-home 'on'"$'\n'
+	fi
 	block+="$END"
 
 	run=$(grep -nE '^[[:space:]]*run(-shell)?[[:space:]].*tpm' "$tmp" | head -1 | cut -d: -f1 || true)
@@ -451,6 +458,7 @@ load_into_tmux() {
 	tmux has-session 2> /dev/null || return 0
 	# The running server hasn't read the config's new lines; continuum checks this one as it loads.
 	[ -n "$BOOT" ] && tmux set-option -g @continuum-boot on
+	[ "$TRUST_HOME" = 1 ] && tmux set-option -g @tmux-restore-trust-home on
 	tmux run-shell "$(tpm_path)" && say "Loaded into your running tmux server"
 }
 
@@ -490,6 +498,11 @@ uninstall() {
 		case $hook in */tmux-restore/scripts/save-hook.sh)
 			tmux set-option -g @resurrect-hook-post-save-layout "$(tmux show-option -gqv @tmux-restore-next-hook)"
 			tmux set-option -gu @tmux-restore-next-hook ;;
+		esac
+		hook=$(tmux show-option -gqv @resurrect-hook-post-restore-all)
+		case $hook in */tmux-restore/scripts/post-restore.sh)
+			tmux set-option -g @resurrect-hook-post-restore-all "$(tmux show-option -gqv @tmux-restore-next-post-restore-hook)"
+			tmux set-option -gu @tmux-restore-next-post-restore-hook ;;
 		esac
 		hook=$(tmux show-option -gqv @resurrect-hook-pre-restore-all)
 		case $hook in */tmux-restore/scripts/pre-restore.sh)

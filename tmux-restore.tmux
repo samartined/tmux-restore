@@ -25,6 +25,13 @@ main() {
 	current=$(option @resurrect-hook-pre-restore-all)
 	[ -n "$current" ] && [ "$current" != "$hook" ] && tmux set-option -g @tmux-restore-next-pre-restore-hook "$current"
 	tmux set-option -g @resurrect-hook-pre-restore-all "$hook"
+
+	# After a restore, answer Claude Code's home-folder trust prompt if @tmux-restore-trust-home is
+	# on (scripts/post-restore.sh).
+	hook="$CURRENT_DIR/scripts/post-restore.sh"
+	current=$(option @resurrect-hook-post-restore-all)
+	[ -n "$current" ] && [ "$current" != "$hook" ] && tmux set-option -g @tmux-restore-next-post-restore-hook "$current"
+	tmux set-option -g @resurrect-hook-post-restore-all "$hook"
 	local started
 	started=$(tmux display-message -p '#{start_time}')
 	[ -n "$started" ] && [ $(($(date +%s) - started)) -le 10 ] && tmux run-shell -b "$CURRENT_DIR/scripts/restore-safety-net.sh"

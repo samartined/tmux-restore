@@ -62,6 +62,23 @@ systemd user manager's environment, not your SSH login's (an SSH agent socket, f
 pane still runs your shell with its startup files. `--uninstall` disables the unit again,
 without stopping a running tmux. Not on macOS, where continuum would open Terminal.app for it.
 
+**Claude Code's trust prompts.** A resumed Claude Code session asks again whether to trust its
+folder when that trust wasn't saved, and waits there, out of reach of the Claude app:
+- **The home folder.** Claude Code never saves trust for it ("This is your home folder, so Yes
+  lasts for this session only"), so a session working in `$HOME` asks after every restore. With
+  `set -g @tmux-restore-trust-home 'on'` (the installer writes it with
+  `TMUX_RESTORE_TRUST_HOME=1`), tmux-restore answers "Yes, I trust this folder" for 2 minutes after
+  a restore, only in panes working in `$HOME` that show exactly that prompt for `$HOME`, and logs
+  each one in `~/.local/state/tmux-restore/trust.log`. That trust only covers what Claude Code
+  already loads from your home folder anyway (your own `~/.claude`), and anyone who can write
+  there can already change your shell's startup files. Off by default.
+- **A folder added with `--add-dir`** that isn't in a trusted repository: Claude Code asks for
+  it on every start. Trust its repository once for good: answer the prompt, or set
+  `projects["<repository root>"].hasTrustDialogAccepted` to `true` in `~/.claude.json`.
+
+A `--add-dir` folder that no longer exists (one in `/tmp`, after a reboot) doesn't stop the
+session.
+
 **One tmux server, on the default socket.** The 5-minute save and the save at shutdown run
 `tmux` outside tmux, so they reach the server on the default socket. A server started with
 `-L`/`-S`, or with `TMUX_TMPDIR` set in your shell only, isn't saved by them.

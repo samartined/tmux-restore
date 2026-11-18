@@ -49,7 +49,15 @@ claude_resume() {
 	# Before anything is typed there's no transcript to resume: start a session with that id.
 	compgen -G "$(claude_dir)/projects/*/$id.jsonl" > /dev/null || flag=--session-id
 	proc_args "$pid" || return 1
-	printf 'claude %s %s%s' "$flag" "$id" "$(keep_flags claude "${ARGV[@]}")"
+	local kept name
+	kept=$(keep_flags claude "${ARGV[@]}")
+	# The session's name is how other sessions address it; a resumed session gets a new one unless
+	# it's given. Keep the one the registry has, unless a flag already names it.
+	name=$(jq -r '.name // empty' "$(claude_dir)/sessions/$pid.json" 2> /dev/null)
+	if [[ -n $name && "$kept " != *" -n "* && "$kept " != *" --name "* && $kept != *" --name="* ]]; then
+		kept+=" --name $(printf '%q' "$name")"
+	fi
+	printf 'claude %s %s%s' "$flag" "$id" "$kept"
 }
 
 claude_continue() {
