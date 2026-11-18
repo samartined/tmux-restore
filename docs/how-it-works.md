@@ -159,7 +159,9 @@ tmux-restore sets these only if you haven't set them yourself:
 | `@continuum-save-interval` | `1`: save every minute |
 | `@continuum-boot` | `on` on Linux with systemd: tmux starts at boot (the installer writes it into your config) |
 | `@tmux-restore-trust-home` | off; `on` answers Claude Code's home-folder trust prompt after a restore (the installer writes it with `TMUX_RESTORE_TRUST_HOME=1`) |
-| `@resurrect-capture-pane-contents` | `on`: keep scrollback |
+| `@resurrect-capture-pane-contents` | `on`: keep what each pane showed |
+| `@resurrect-pane-contents-area` | `visible`: only the screen, not the whole scrollback |
+| `@resurrect-delete-backup-after` | `1`: saves are deleted once 2 days old (resurrect counts whole days past 1), always keeping the newest 5 |
 | `@resurrect-save-command-strategy` | `linux_procfs` on Linux: exact command lines |
 
 It always sets two tmux-resurrect hooks, and a hook you already had there runs after its own:

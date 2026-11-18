@@ -10,6 +10,11 @@ main() {
 	default @continuum-restore on        # restore when the tmux server starts
 	default @continuum-save-interval 1   # save every minute
 	default @resurrect-capture-pane-contents on
+	# What a pane showed can hold secrets, so keep less of it: the screen, not the whole scrollback,
+	# and saves (each with every pane's command line) for 2 days instead of 30. resurrect always
+	# keeps the newest 5.
+	default @resurrect-pane-contents-area visible
+	default @resurrect-delete-backup-after 1
 	[ "$(uname -s)" = Linux ] && default @resurrect-save-command-strategy linux_procfs
 
 	# The save hook rewrites each pane's command (scripts/save-hook.sh). A hook you already had
