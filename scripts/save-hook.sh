@@ -161,27 +161,49 @@ activate() {
 	printf ". '%s/bin/activate' 2> /dev/null" "${1//\'/\'\\\'\'}"
 }
 
+# keep_last SAVE_FILE: make this save a copy of `last`, so resurrect sees no change and deletes
+# it. resurrect also rebuilds the scrollback archive next, from save/pane_contents, so put the old
+# scrollback there.
+keep_last() {
+	local dir last
+	dir=$(dirname "$1") last="$(dirname "$1")/last"
+	if [[ -s $last && ! $last -ef $1 ]]; then
+		cat "$last" > "$1"
+		if [[ -s $dir/pane_contents.tar.gz ]]; then
+			mkdir -p "$dir/save" && gzip -dc "$dir/pane_contents.tar.gz" | tar xf - -C "$dir/save/" 2> /dev/null
+		fi
+	fi
+}
+
+# shutting_down: the system (or your systemd user manager) is stopping. Its units stop in
+# parallel, so the programs in the panes may already be gone; tmux.service (@continuum-boot)
+# saves as it stops, and a save then loses every conversation. The save at shutdown that counts
+# is the one before any of that (scripts/shutdown-save.sh, which sets TMUX_RESTORE_SHUTDOWN_SAVE).
+shutting_down() {
+	[[ -z ${TMUX_RESTORE_SHUTDOWN_SAVE:-} ]] && command -v systemctl > /dev/null || return 1
+	[[ $(systemctl is-system-running 2> /dev/null) == stopping ||
+		$(systemctl --user is-system-running 2> /dev/null) == stopping ]]
+}
+
 main() {
-	local save_file=$1 line cmd target pid venv i
+	local save_file=$1 line cmd target pid venv i title
 	local -a lines out heads cmds keys fields targets
 	local -A pane_pids venvs count
 	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private.
 	chmod 700 "$(dirname "$save_file")" 2> /dev/null
 	# No panes means tmux was read wrong (in the C locale tmux turns resurrect's tabs into "_").
-	# resurrect would make this save `last` and lose the good one, so make it a copy of `last`:
-	# resurrect then sees no change and deletes it. It also rebuilds the scrollback archive next,
-	# from save/pane_contents, so put the old scrollback there. (A save after the server went
-	# away never gets here, as resurrect can't look this hook up; scripts/pre-restore.sh mends
-	# `last` for that one.)
+	# resurrect would make this save `last` and lose the good one, so keep `last`. (A save after
+	# the server went away never gets here, as resurrect can't look this hook up;
+	# scripts/pre-restore.sh mends `last` for that one.) Same for a save while the system shuts
+	# down.
 	if ! grep -q $'^pane\t' "$save_file" 2> /dev/null; then
-		local dir last
-		dir=$(dirname "$save_file") last="$(dirname "$save_file")/last"
-		if [[ -s $last && ! $last -ef $save_file ]]; then
-			cat "$last" > "$save_file"
-			if [[ -s $dir/pane_contents.tar.gz ]]; then
-				mkdir -p "$dir/save" && gzip -dc "$dir/pane_contents.tar.gz" | tar xf - -C "$dir/save/" 2> /dev/null
-			fi
-		fi
+		keep_last "$save_file"
+		run_next_hook "$save_file"
+		return
+	fi
+	if shutting_down; then
+		echo "tmux-restore: the system is shutting down, so this save is dropped and the last one kept" >&2
+		keep_last "$save_file"
 		run_next_hook "$save_file"
 		return
 	fi
@@ -204,6 +226,17 @@ main() {
 		cmd=${line##*$'\t':} # last field minus resurrect's ":" prefix
 		cmds[i]=$(tidy "${cmd% }")
 		mapfile -td $'\t' fields < <(printf '%s' "${heads[i]}")
+		# resurrect reads its fields with `read`, which merges two tabs in a row: a pane with an
+		# empty title (a program clears it as it exits) comes out shifted, with the folder where
+		# the title goes and the pane's pid added, and would be restored in the wrong folder.
+		# Put a title back (tmux's default, the host name). The command, worked out from the
+		# wrong pid, is dropped.
+		if ((${#fields[@]} == 10)) && [[ ${fields[6]} == :* && ${fields[7]} != :* ]]; then
+			title=$(hostname -s 2> /dev/null || hostname)
+			heads[i]=$(printf '%s\t' "${fields[@]:0:6}" "${title:-tmux}" "${fields[@]:6:3}")
+			heads[i]=${heads[i]%$'\t'}
+			cmds[i]=""
+		fi
 		target="${fields[1]}:${fields[2]}.${fields[5]}"
 		targets[i]=$target
 		rewrite "${pane_pids[$target]:-}" "${cmds[i]}"

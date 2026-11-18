@@ -98,6 +98,24 @@ mending after every save. A save of a live server that reads no panes (tmux in t
 resurrect's tabs into `_`) is caught earlier: the save hook makes it a copy of `last`, so resurrect
 deletes it, and puts the old scrollback back for the archive resurrect rebuilds next.
 
+## A save while the system shuts down
+
+At shutdown systemd stops units in parallel: the scopes your panes run in, and `tmux.service`
+(`@continuum-boot`), which saves as it stops. That save can find the panes' programs gone or
+exiting: no conversation to resume, panes with no command. The save hook drops any save made while
+the system or your systemd user manager is stopping (`systemctl is-system-running` says
+`stopping`), the same way as a save with no panes: `last` stays the save taken before shutdown
+began. That one, from [`scripts/shutdown-save.sh`](../scripts/shutdown-save.sh), sets
+`TMUX_RESTORE_SHUTDOWN_SAVE=1` and is kept.
+
+## A pane with an empty title
+
+resurrect reads its own fields with `read`, which merges two tabs in a row, so a pane whose title
+is empty (a program can clear it as it exits) is saved shifted: its folder where the title goes,
+and its pid after the command name. Restored, that pane would open in the wrong folder. The save
+hook puts a title back (the host name, tmux's default) and drops the command resurrect worked out
+from the wrong pid; an agent's conversation is still found from the pane itself.
+
 The minute-by-minute and 5-minute saves cover crashes and power loss.
 
 ## Restoring
