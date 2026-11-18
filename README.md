@@ -46,8 +46,9 @@ windows, splits, working directories and scrollback. It adds:
 - **Python venvs come back,** once you add
   [one line](docs/how-it-works.md#python-virtual-environments) to `~/.zshrc` or `~/.bashrc`.
 
-Scrollback is saved to disk, so anything a pane showed, a password included, sits in a folder
-only you can read. To not save it, add `set -g @resurrect-capture-pane-contents 'off'`.
+What each pane's screen showed is saved to disk, so anything on it, a password included, sits in
+a folder only you can read: the visible screen only, not the scrollback, and saves are deleted
+after 2 days. To not save it, add `set -g @resurrect-capture-pane-contents 'off'`.
 
 ## Install
 

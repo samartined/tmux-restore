@@ -160,6 +160,8 @@ if [[ $scenario == fresh ]]; then
 	check "[fresh] hook registered" "$P/tmux-restore/scripts/save-hook.sh" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
 	ok "[fresh] restore marker registered" "tmux show -gqv @resurrect-processes | grep -qF '\"~^TMUX_RESTORE=1 \"'"
 	check "[fresh] continuum restores on start" on "$(tmux show -gqv @continuum-restore)"
+	check "[fresh] only the visible screen saved" visible "$(tmux show -gqv @resurrect-pane-contents-area)"
+	check "[fresh] saves deleted after 2 days" 1 "$(tmux show -gqv @resurrect-delete-backup-after)"
 	check "[fresh] post-save hook registered" "$P/tmux-restore/scripts/post-save.sh" "$(tmux show -gqv @resurrect-hook-post-save-all)"
 	check "[fresh] post-restore hook registered" "$P/tmux-restore/scripts/post-restore.sh" "$(tmux show -gqv @resurrect-hook-post-restore-all)"
 	check "[fresh] home-folder trust answered (TMUX_RESTORE_TRUST_HOME=1)" on "$(tmux show -gqv @tmux-restore-trust-home)"
