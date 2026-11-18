@@ -111,4 +111,19 @@ tmux set-option -p -t "$(printf '%s:%s.%s' $target)" @tmux-restore-venv "$D/venv
 printf 'pane\t%s\t%s\t1\t:*\t%s\tzsh\t:/tmp\t1\tzsh\t:\n' $target > "$D/save"
 main "$D/save"
 check "venv: read from the pane option" ":TMUX_RESTORE=1 . '$D/venv/bin/activate' 2> /dev/null" "$(cut -f11 "$D/save")"
+# A save with no panes (tmux couldn't be read: the server was going away) must not replace the
+# good save: the hook makes it a copy of `last`, so resurrect sees no change and deletes it.
+mkdir -p "$D/rs"
+printf 'pane\tmain\t0\t1\t:*\t0\tzsh\t:/tmp\t1\tzsh\t:\nwindow\tmain\t0\t:zsh\t1\t:*\tlayout\t:\n' > "$D/rs/good.txt"
+ln -s good.txt "$D/rs/last"
+: > "$D/rs/empty.txt"
+main "$D/rs/empty.txt"
+check "empty save: becomes a copy of last" "$(cat "$D/rs/good.txt")" "$(cat "$D/rs/empty.txt")"
+printf 'state\t\t\n' > "$D/rs/state-only.txt"
+main "$D/rs/state-only.txt"
+check "save without panes: becomes a copy of last" "$(cat "$D/rs/good.txt")" "$(cat "$D/rs/state-only.txt")"
+check "good save: untouched" "$(printf 'pane\tmain\t0\t1\t:*\t0\tzsh\t:/tmp\t1\tzsh\t:')" "$(head -1 "$D/rs/good.txt")"
+rm "$D/rs/last"; : > "$D/rs/first.txt"
+main "$D/rs/first.txt"
+check "empty save with no last: left as it is" "" "$(cat "$D/rs/first.txt")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

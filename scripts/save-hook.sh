@@ -167,6 +167,16 @@ main() {
 	local -A pane_pids venvs count
 	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private.
 	chmod 700 "$(dirname "$save_file")" 2> /dev/null
+	# No panes means tmux couldn't be read (the server was going away, at shutdown say). resurrect
+	# would make this save `last` and lose the good one, so make it a copy of `last`: resurrect
+	# then sees no change and deletes it.
+	if ! grep -q $'^pane\t' "$save_file" 2> /dev/null; then
+		local last
+		last="$(dirname "$save_file")/last"
+		[[ -s $last ]] && cat "$last" > "$save_file"
+		run_next_hook "$save_file"
+		return
+	fi
 	load_agents
 	restore_list
 	ZSH=""
