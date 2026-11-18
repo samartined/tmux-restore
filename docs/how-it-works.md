@@ -90,7 +90,11 @@ finds no panes, and resurrect still makes that empty save `last`: the next start
 nothing ([tmux-resurrect#576](https://github.com/tmux-plugins/tmux-resurrect/pull/576)). resurrect
 reads `last` only after its pre-restore-all hook, so
 [`scripts/pre-restore.sh`](../scripts/pre-restore.sh) points an empty `last` back at the newest
-save that has panes. A save of a live server that reads no panes (tmux in the C locale turns
+save that has panes ([`scripts/mend-last.sh`](../scripts/mend-last.sh)). Two saves in the same
+second (the 5-minute save and continuum's, say) write the same file: one makes it `last`, the
+other finds it unchanged and deletes it, so `last` points at nothing and a restore wouldn't even
+start. The post-save-all hook ([`scripts/post-save.sh`](../scripts/post-save.sh)) runs the same
+mending after every save. A save of a live server that reads no panes (tmux in the C locale turns
 resurrect's tabs into `_`) is caught earlier: the save hook makes it a copy of `last`, so resurrect
 deletes it, and puts the old scrollback back for the archive resurrect rebuilds next.
 

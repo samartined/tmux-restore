@@ -160,6 +160,7 @@ if [[ $scenario == fresh ]]; then
 	check "[fresh] hook registered" "$P/tmux-restore/scripts/save-hook.sh" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
 	ok "[fresh] restore marker registered" "tmux show -gqv @resurrect-processes | grep -qF '\"~^TMUX_RESTORE=1 \"'"
 	check "[fresh] continuum restores on start" on "$(tmux show -gqv @continuum-restore)"
+	check "[fresh] post-save hook registered" "$P/tmux-restore/scripts/post-save.sh" "$(tmux show -gqv @resurrect-hook-post-save-all)"
 	check "[fresh] post-restore hook registered" "$P/tmux-restore/scripts/post-restore.sh" "$(tmux show -gqv @resurrect-hook-post-restore-all)"
 	check "[fresh] home-folder trust answered (TMUX_RESTORE_TRUST_HOME=1)" on "$(tmux show -gqv @tmux-restore-trust-home)"
 	tmux new-window -d -t main -n work
@@ -232,6 +233,7 @@ if [[ $scenario == running ]]; then
 	bash "$here/../install.sh" --uninstall > ~/uninstall.log 2>&1
 	check "[running] uninstall gives back the save hook" "" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
 	check "[running] ...and the restore hook" "" "$(tmux show -gqv @resurrect-hook-pre-restore-all)"
+	check "[running] ...and the post-save hook" "" "$(tmux show -gqv @resurrect-hook-post-save-all)"
 	check "[running] ...and the post-restore hook" "" "$(tmux show -gqv @resurrect-hook-post-restore-all)"
 	tmux kill-server
 fi
