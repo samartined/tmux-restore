@@ -136,12 +136,16 @@ if [[ $scenario == fresh ]]; then
 		ok "[fresh] periodic save unit runs save-now.sh --periodic" "grep -q '^ExecStart=\"$P/tmux-restore/scripts/save-now.sh\" --periodic$' ~/.config/systemd/user/tmux-restore-save.service"
 		ok "[fresh] periodic save unit finds tmux" "grep -q \"^Environment=PATH=.*$(dirname "$(command -v tmux)")\" ~/.config/systemd/user/tmux-restore-save.service"
 		ok "[fresh] periodic save timer written" "grep -q '^OnUnitActiveSec=5min$' ~/.config/systemd/user/tmux-restore-save.timer"
+		ok "[fresh] tmux starts at boot (continuum's systemd unit)" "grep -q \"^set -g @continuum-boot 'on'$\" ~/.tmux.conf"
+		ok "[fresh] ...noted, so that --uninstall turns it off" "[[ -e ~/.local/state/tmux-restore/enabled-boot ]]"
+		ok "[fresh] ...with a UTF-8 locale when the user manager has none" "grep -q '^Environment=LANG=C.UTF-8$' ~/.config/systemd/user/tmux.service.d/tmux-restore-locale.conf"
 		ok "[fresh] periodic save timer enabled and started" "grep -q '^--user enable -q --now tmux-restore-save.timer$' ~/systemctl.log"
 	else
 		ok "[fresh] flock installed (one restore at a time)" "command -v flock > /dev/null"
 		ok "[fresh] bash 4+ installed (the save hook)" "[[ -x /opt/homebrew/bin/bash || -x /usr/local/bin/bash ]]"
 		ok "[fresh] shutdown watcher built" "[[ -x $P/tmux-restore/bin/tmux-restore-shutdown ]]"
 		ok "[fresh] LaunchAgent written" "plutil -lint ~/Library/LaunchAgents/$LABEL.plist > /dev/null"
+		ok "[fresh] no continuum boot on macOS (it opens Terminal.app)" "! grep -q '@continuum-boot' ~/.tmux.conf"
 		ok "[fresh] periodic save LaunchAgent written" "plutil -lint ~/Library/LaunchAgents/$LABEL.save.plist > /dev/null && grep -q '<string>--periodic</string>' ~/Library/LaunchAgents/$LABEL.save.plist"
 		ok "[fresh] periodic save LaunchAgent loaded" "launchctl print gui/$(id -u)/$LABEL.save > /dev/null 2>&1"
 	fi
@@ -196,6 +200,12 @@ if [[ $scenario == fresh ]]; then
 	check "[fresh] uninstall exits 0" 0 "$?"
 	ok "[fresh] block removed" "! grep -q 'tmux-restore' ~/.tmux.conf"
 	ok "[fresh] unit removed" "[[ ! -e ~/.config/systemd/user/tmux-restore.service ]]"
+	if [[ $OS == Linux ]]; then
+		ok "[fresh] boot at startup turned off" "grep -q '^--user disable -q tmux.service$' ~/systemctl.log"
+		ok "[fresh] ...without stopping tmux" "! grep -q 'stop.*tmux.service' ~/systemctl.log"
+		ok "[fresh] ...and the note removed" "[[ ! -e ~/.local/state/tmux-restore/enabled-boot ]]"
+		ok "[fresh] ...and the locale drop-in removed" "[[ ! -e ~/.config/systemd/user/tmux.service.d ]]"
+	fi
 	ok "[fresh] periodic save units removed" "[[ ! -e ~/.config/systemd/user/tmux-restore-save.service && ! -e ~/.config/systemd/user/tmux-restore-save.timer ]]"
 	[[ $OS == Darwin ]] && ok "[fresh] periodic save LaunchAgent removed" "[[ ! -e ~/Library/LaunchAgents/$LABEL.save.plist ]] && ! launchctl print gui/$(id -u)/$LABEL.save > /dev/null 2>&1"
 	[[ $OS == Darwin ]] && ok "[fresh] LaunchAgent removed" "[[ ! -e ~/Library/LaunchAgents/$LABEL.plist ]] && ! launchctl print gui/$(id -u)/$LABEL > /dev/null 2>&1"
@@ -205,6 +215,7 @@ if [[ $scenario == running ]]; then
 	check "[running] hook loaded into the running server" "$P/tmux-restore/scripts/save-hook.sh" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
 	ok "[running] restore marker loaded" "tmux show -gqv @resurrect-processes | grep -qF '\"~^TMUX_RESTORE=1 \"'"
 	ok "[running] says it loaded" "grep -q 'Loaded into your running tmux server' ~/install.log"
+	[[ $OS == Linux ]] && ok "[running] no boot at startup without systemd" "! grep -q '@continuum-boot' ~/.tmux.conf"
 	[[ $OS == Linux ]] && ok "[running] no save-at-shutdown without systemd, and says so" "grep -q 'No systemd user session' ~/install.log && [[ ! -e ~/.config/systemd/user/tmux-restore.service ]]"
 	sleep 6
 	check "[running] its sessions left alone (nothing restored)" mine "$(tmux list-sessions -F '#S' | tr '\n' ' ' | sed 's/ $//')"

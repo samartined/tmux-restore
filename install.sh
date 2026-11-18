@@ -33,6 +33,9 @@ LABEL=io.github.andrewboldi.tmux-restore
 SAVE_LABEL=$LABEL.save
 # Exists if this installer turned on lingering, so that --uninstall turns it off again.
 LINGER_MARK=${XDG_STATE_HOME:-$HOME/.local/state}/tmux-restore/enabled-linger
+# Exists if this installer turned on starting tmux at boot (Linux), so that --uninstall turns it off.
+BOOT_MARK=${XDG_STATE_HOME:-$HOME/.local/state}/tmux-restore/enabled-boot
+BOOT=""
 
 say() { printf '\033[1;32m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mwarning:\033[0m %s\n' "$*" >&2; }
@@ -41,6 +44,7 @@ die() {
 	exit 1
 }
 have() { command -v "$1" > /dev/null 2>&1; }
+systemd_dir() { echo "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"; }
 user_systemd() { [ "$(uname -s)" = Linux ] && have systemctl && systemctl --user show-environment > /dev/null 2>&1; }
 
 as_root() {
@@ -138,7 +142,7 @@ plugins_dir() {
 # clone URL DIR [BRANCH]
 clone() {
 	if [ -n "${3:-}" ]; then
-		git clone -q --depth 1 -b "$3" "$1" "$2"
+		git -c advice.detachedHead=false clone -q --depth 1 -b "$3" "$1" "$2"
 	else
 		git clone -q --depth 1 "$1" "$2"
 	fi
@@ -176,7 +180,7 @@ install_plugins() {
 		clone "$RESTORE_URL" "$PLUGINS/tmux-restore" "$RESTORE_REF"
 	elif [ -n "$RESTORE_REF" ]; then
 		{ git -C "$PLUGINS/tmux-restore" fetch -q --depth 1 origin "$RESTORE_REF" &&
-			git -C "$PLUGINS/tmux-restore" checkout -q FETCH_HEAD; } ||
+			git -C "$PLUGINS/tmux-restore" -c advice.detachedHead=false checkout -q FETCH_HEAD; } ||
 			warn "couldn't switch $PLUGINS/tmux-restore to $RESTORE_REF"
 	else
 		git -C "$PLUGINS/tmux-restore" pull -q --ff-only || warn "couldn't update $PLUGINS/tmux-restore"
@@ -236,6 +240,16 @@ edit_conf() {
 	# continuum checks this as soon as it loads, possibly before tmux-restore sets it
 	grep -Eq '^[[:space:]]*set(-option)?[[:space:]]+(-g[[:space:]]+)?@continuum-restore[[:space:]]' "$tmp" ||
 		block+="set -g @continuum-restore 'on'"$'\n'
+	# Start tmux at boot, so that everything comes back with nobody logging in: continuum writes
+	# and enables a systemd user unit, tmux.service (with lingering it starts at boot). Linux only:
+	# on macOS continuum opens Terminal.app for it. Left alone if you set @continuum-boot yourself
+	# or have a tmux.service of your own.
+	if [ "$(uname -s)" = Linux ] && user_systemd &&
+		! grep -Eq '^[[:space:]]*set(-option)?[[:space:]]+(-g[[:space:]]+)?@continuum-boot[[:space:]]' "$tmp" &&
+		{ ! [ -e "$(systemd_dir)/tmux.service" ] || grep -q '^Description=tmux default session (detached)$' "$(systemd_dir)/tmux.service"; }; then
+		block+="set -g @continuum-boot 'on'"$'\n'
+		BOOT=1
+	fi
 	block+="$END"
 
 	run=$(grep -nE '^[[:space:]]*run(-shell)?[[:space:]].*tpm' "$tmp" | head -1 | cut -d: -f1 || true)
@@ -356,6 +370,30 @@ enable_linger() {
 	fi
 }
 
+# Notes that tmux starts at boot because of us (continuum writes and enables tmux.service when it
+# loads), and gives that unit a UTF-8 locale if the user manager has none: tmux-resurrect parses
+# tab-separated tmux output, which a server in the C locale mangles, and every save would fail.
+enable_boot() {
+	{ mkdir -p "$(dirname "$BOOT_MARK")" && : > "$BOOT_MARK"; } 2> /dev/null || true
+	if ! systemctl --user show-environment 2> /dev/null | grep -Eq '^(LC_ALL|LC_CTYPE|LANG)=.*[Uu][Tt][Ff]-?8'; then
+		mkdir -p "$(systemd_dir)/tmux.service.d"
+		printf '[Service]\nEnvironment=LANG=C.UTF-8\n' > "$(systemd_dir)/tmux.service.d/tmux-restore-locale.conf"
+	fi
+	say "tmux starts at boot (continuum's tmux.service), so everything comes back with nobody logging in"
+}
+
+# For --uninstall: stop starting tmux at boot, if enable_boot turned it on. tmux keeps running.
+disable_boot() {
+	[ -e "$BOOT_MARK" ] || return 0
+	user_systemd && systemctl --user disable -q tmux.service 2> /dev/null || true
+	rm -f "$(systemd_dir)/tmux.service" "$(systemd_dir)/tmux.service.d/tmux-restore-locale.conf"
+	rmdir "$(systemd_dir)/tmux.service.d" 2> /dev/null || true
+	user_systemd && systemctl --user daemon-reload || true
+	rm -f "$BOOT_MARK"
+	rmdir "$(dirname "$BOOT_MARK")" 2> /dev/null || true
+	say "tmux no longer starts at boot (the running server is left alone)"
+}
+
 # For --uninstall: turn lingering off again, if enable_linger turned it on.
 disable_linger() {
 	[ -e "$LINGER_MARK" ] || return 0
@@ -443,6 +481,7 @@ uninstall() {
 		user_systemd && systemctl --user daemon-reload || true
 		say "Removed $UNIT"
 	fi
+	disable_boot
 	disable_linger
 	if tmux has-session 2> /dev/null; then # give the running server its own hooks back
 		hook=$(tmux show-option -gqv @resurrect-hook-post-save-layout)
@@ -476,6 +515,7 @@ main() {
 	PLUGINS=$(plugins_dir)
 	install_plugins
 	edit_conf
+	[ -n "$BOOT" ] && enable_boot
 	install_service
 	load_into_tmux
 	say "Done. tmux is saved every minute and comes back when tmux starts, agents and all."

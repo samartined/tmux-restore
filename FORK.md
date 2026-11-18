@@ -11,12 +11,14 @@ agent can follow it step by step.
 |---|---|---|
 | A timer saves every 5 minutes while nobody is attached (systemd on Linux, a LaunchAgent on macOS) | tmux-continuum saves only while a client is attached, so detached servers were saved only at shutdown | Not proposed yet. Same idea as tmux-plugins/tmux-continuum#157 (Linux only, by hand, unmerged) |
 | An empty `last` (a save made after the server went away) is pointed back at the newest good save before a restore | Otherwise the next start restores nothing: tmux-plugins/tmux-resurrect#576, tmux-plugins/tmux-continuum#166 | Not proposed yet |
+| tmux starts at boot on Linux (`@continuum-boot`), and `--uninstall` turns that off again | After a power cut everything comes back with nobody logging in | Fork only |
 | The installer installs this fork, can pin a ref (`TMUX_RESTORE_REF`), and doesn't install sqlite3 | One version on every machine; sqlite3 (opencode only) needed root | Fork only |
 
 ## Releases
 
 | Tag | Upstream base | Notes |
 |---|---|---|
+| `fork.2` | `94c8488` | tmux starts at boot on Linux |
 | `fork.1` | `94c8488` | first release |
 
 ## Install (instructions for an agent)
@@ -47,8 +49,9 @@ sessions: the installer loads into a running server without restoring over it.
 4. **Verify.**
    - `grep -A6 '>>> tmux-restore >>>' ~/.tmux.conf` (or `~/.config/tmux/tmux.conf`) names
      `samartined/tmux-restore#<tag>`.
-   - Linux: `systemctl --user is-enabled tmux-restore.service tmux-restore-save.timer` says
-     `enabled` twice, and `loginctl show-user "$USER" -p Linger` says `Linger=yes`.
+   - Linux: `systemctl --user is-enabled tmux-restore.service tmux-restore-save.timer tmux.service`
+     says `enabled` three times (`tmux.service` appears once tmux has loaded the plugins, which
+     the installer does when tmux is running), and `loginctl show-user "$USER" -p Linger` says `Linger=yes`.
    - macOS: `launchctl print gui/$(id -u)/io.github.andrewboldi.tmux-restore.save` succeeds.
    - If tmux is running: `~/.tmux/plugins/tmux-restore/scripts/save-now.sh` prints `tmux saved`.
      Then `grep -c '^pane' ~/.local/share/tmux/resurrect/last` is at least 1, and each pane

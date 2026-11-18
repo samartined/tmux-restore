@@ -125,6 +125,7 @@ tmux-restore sets these only if you haven't set them yourself:
 |---|---|
 | `@continuum-restore` | `on`: restore when the tmux server starts (the installer also writes it into your config, because continuum reads it before plugins listed after it load) |
 | `@continuum-save-interval` | `1`: save every minute |
+| `@continuum-boot` | `on` on Linux with systemd: tmux starts at boot (the installer writes it into your config) |
 | `@resurrect-capture-pane-contents` | `on`: keep scrollback |
 | `@resurrect-save-command-strategy` | `linux_procfs` on Linux: exact command lines |
 
