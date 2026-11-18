@@ -55,6 +55,13 @@ On Linux, the timer and the shutdown save run in your systemd user manager, whic
 last login session unless your user lingers. The installer enables lingering (`loginctl enable-linger`), and tells you the `sudo`
 command if it can't. `--uninstall` turns it off again if the installer turned it on.
 
+**Starting at boot (Linux).** The installer sets `@continuum-boot 'on'`: tmux-continuum writes and
+enables a systemd user unit, `tmux.service`, that starts tmux at boot, and with lingering that
+needs no login, so everything comes back on its own after a power cut. That server gets the
+systemd user manager's environment, not your SSH login's (an SSH agent socket, for one); each
+pane still runs your shell with its startup files. `--uninstall` disables the unit again,
+without stopping a running tmux. Not on macOS, where continuum would open Terminal.app for it.
+
 **One tmux server, on the default socket.** The 5-minute save and the save at shutdown run
 `tmux` outside tmux, so they reach the server on the default socket. A server started with
 `-L`/`-S`, or with `TMUX_TMPDIR` set in your shell only, isn't saved by them.
