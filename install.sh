@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
-# tmux-restore installer. Re-run it to update; it changes nothing that's already in place.
+# tmux-restore installer (samartined fork). Re-run it to update; it changes nothing that's
+# already in place.
 #
-#   curl -fsSL https://raw.githubusercontent.com/andrewboldi/tmux-restore/main/install.sh | bash
-#   curl -fsSL https://raw.githubusercontent.com/andrewboldi/tmux-restore/main/install.sh | bash -s -- --uninstall
+#   git clone https://github.com/samartined/tmux-restore && cd tmux-restore
+#   TMUX_RESTORE_REF=<tag> ./install.sh      # install that release (without it: the main branch)
+#   ./install.sh --uninstall
 #
-# 1. Installs what's missing: tmux, git, jq, sqlite3 (and gdbus on Linux with systemd).
+# 1. Installs what's missing: tmux, git, jq (and gdbus on Linux with systemd). sqlite3, which
+#    only opencode's sessions need, is used if present but never installed (that needs root).
 # 2. Installs TPM, tmux-resurrect (with a fix for concurrent restores), tmux-continuum and
 #    tmux-restore, and adds them to your tmux config (the original is kept as *.before-tmux-restore).
 # 3. Saves right before shutdown: a systemd user service on Linux, a LaunchAgent on macOS.
 # 4. Loads the plugins into your running tmux server, if there is one.
 #
 # TMUX_RESTORE_SOURCE overrides where tmux-restore is cloned from (a URL or a path ending in
-# /tmux-restore); used for testing. Runs with macOS's bash 3.2: no bash 4 features here.
+# /tmux-restore); used for testing. TMUX_RESTORE_REF pins a branch or tag: the plugin is checked
+# out at it, and your tmux config names it, so TPM keeps it there. Runs with macOS's bash 3.2: no
+# bash 4 features here.
 set -euo pipefail
 
-RESTORE_URL=${TMUX_RESTORE_SOURCE:-https://github.com/andrewboldi/tmux-restore}
+RESTORE_URL=${TMUX_RESTORE_SOURCE:-https://github.com/samartined/tmux-restore}
+RESTORE_PLUGIN=samartined/tmux-restore # how the tmux config names it for TPM
+RESTORE_REF=${TMUX_RESTORE_REF:-}
 RESURRECT_URL=https://github.com/andrewboldi/tmux-resurrect
 RESURRECT_BRANCH=fix-concurrent-restore
 BEGIN="# >>> tmux-restore >>>"
@@ -92,7 +99,8 @@ install_packages() {
 install_deps() {
 	local -a need=()
 	local tool
-	for tool in tmux git jq sqlite3; do have "$tool" || need+=("$tool"); done
+	for tool in tmux git jq; do have "$tool" || need+=("$tool"); done
+	have sqlite3 || warn "sqlite3 isn't installed: opencode panes come back on their latest conversation (or typed), not their exact one. Install sqlite3 to fix that."
 	if user_systemd; then
 		for tool in gdbus flock; do have "$tool" || need+=("$tool"); done
 	fi
@@ -162,10 +170,14 @@ install_plugins() {
 	[ -x "$(tpm_path)" ] || clone https://github.com/tmux-plugins/tpm "$PLUGINS/tpm"
 	use_resurrect_fork
 	[ -d "$PLUGINS/tmux-continuum" ] || clone https://github.com/tmux-plugins/tmux-continuum "$PLUGINS/tmux-continuum"
-	if [ -d "$PLUGINS/tmux-restore" ]; then
-		git -C "$PLUGINS/tmux-restore" pull -q --ff-only || warn "couldn't update $PLUGINS/tmux-restore"
+	if ! [ -d "$PLUGINS/tmux-restore" ]; then
+		clone "$RESTORE_URL" "$PLUGINS/tmux-restore" "$RESTORE_REF"
+	elif [ -n "$RESTORE_REF" ]; then
+		{ git -C "$PLUGINS/tmux-restore" fetch -q --depth 1 origin "$RESTORE_REF" &&
+			git -C "$PLUGINS/tmux-restore" checkout -q FETCH_HEAD; } ||
+			warn "couldn't switch $PLUGINS/tmux-restore to $RESTORE_REF"
 	else
-		clone "$RESTORE_URL" "$PLUGINS/tmux-restore"
+		git -C "$PLUGINS/tmux-restore" pull -q --ff-only || warn "couldn't update $PLUGINS/tmux-restore"
 	fi
 }
 
@@ -197,7 +209,7 @@ strip_block() {
 }
 
 edit_conf() {
-	local tmp block run home_plugins
+	local tmp block run home_plugins spec
 	tmp=$(mktemp)
 	mkdir -p "$(dirname "$CONF")"
 	touch "$CONF"
@@ -214,11 +226,10 @@ edit_conf() {
 	block="$BEGIN"$'\n'
 	listed tmux-plugins/tpm "$tmp" || block+="set -g @plugin 'tmux-plugins/tpm'"$'\n'
 	block+="set -g @plugin 'andrewboldi/tmux-resurrect#$RESURRECT_BRANCH'"$'\n'
-	if [ -n "${TMUX_RESTORE_SOURCE:-}" ]; then
-		block+="set -g @plugin '$RESTORE_URL'"$'\n'
-	else
-		block+="set -g @plugin 'andrewboldi/tmux-restore'"$'\n'
-	fi
+	spec=$RESTORE_PLUGIN
+	[ -n "${TMUX_RESTORE_SOURCE:-}" ] && spec=$RESTORE_URL
+	[ -n "$RESTORE_REF" ] && spec="$spec#$RESTORE_REF"
+	block+="set -g @plugin '$spec'"$'\n'
 	block+="set -g @plugin 'tmux-plugins/tmux-continuum'"$'\n'
 	# continuum checks this as soon as it loads, possibly before tmux-restore sets it
 	grep -Eq '^[[:space:]]*set(-option)?[[:space:]]+(-g[[:space:]]+)?@continuum-restore[[:space:]]' "$tmp" ||
