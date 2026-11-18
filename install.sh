@@ -28,7 +28,9 @@ BEGIN="# >>> tmux-restore >>>"
 END="# <<< tmux-restore <<<"
 COMMENTED="#tmux-restore# "
 UNIT=tmux-restore.service
+SAVE_UNIT=tmux-restore-save # .service + .timer: saves every few minutes, attached or not
 LABEL=io.github.andrewboldi.tmux-restore
+SAVE_LABEL=$LABEL.save
 # Exists if this installer turned on lingering, so that --uninstall turns it off again.
 LINGER_MARK=${XDG_STATE_HOME:-$HOME/.local/state}/tmux-restore/enabled-linger
 
@@ -254,26 +256,63 @@ edit_conf() {
 	say "Updated $CONF"
 }
 
+# launchd_env: sets LAUNCHD_PATH and LAUNCHD_LANG for the LaunchAgents. launchd's environment has
+# no UTF-8 locale, and in the C locale tmux turns the tabs in tmux-resurrect's output into "_",
+# which leaves the save empty; and its default PATH lacks Homebrew.
+launchd_env() {
+	local dir
+	LAUNCHD_LANG=${LC_ALL:-${LANG:-}}
+	case $LAUNCHD_LANG in *[Uu][Tt][Ff]-8 | *[Uu][Tt][Ff]8) ;; *) LAUNCHD_LANG=en_US.UTF-8 ;; esac
+	LAUNCHD_PATH=/usr/bin:/bin:/usr/sbin:/sbin
+	for dir in /usr/local/bin /opt/homebrew/bin "$(dirname "$(command -v jq || echo /usr/bin/jq)")" "$(dirname "$(command -v tmux)")"; do
+		case ":$LAUNCHD_PATH:" in *":$dir:"*) ;; *) LAUNCHD_PATH="$dir:$LAUNCHD_PATH" ;; esac
+	done
+}
+
+# macOS: saves every 5 minutes, attached or not (tmux-continuum saves only while a client is
+# attached). Needs no compiler, unlike the shutdown watcher.
+install_save_agent() {
+	local plist="$HOME/Library/LaunchAgents/$SAVE_LABEL.plist"
+	mkdir -p "$(dirname "$plist")"
+	launchd_env
+	cat > "$plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>$SAVE_LABEL</string>
+	<key>ProgramArguments</key>
+	<array><string>/bin/bash</string><string>$PLUGINS/tmux-restore/scripts/save-now.sh</string><string>--periodic</string></array>
+	<key>EnvironmentVariables</key>
+	<dict><key>PATH</key><string>$LAUNCHD_PATH</string><key>LANG</key><string>$LAUNCHD_LANG</string></dict>
+	<key>StartInterval</key><integer>300</integer>
+	<key>StandardOutPath</key><string>$HOME/Library/Logs/tmux-restore.log</string>
+	<key>StandardErrorPath</key><string>$HOME/Library/Logs/tmux-restore.log</string>
+	<key>LimitLoadToSessionType</key><string>Aqua</string>
+</dict>
+</plist>
+PLIST
+	launchctl bootout "gui/$(id -u)/$SAVE_LABEL" 2> /dev/null || true
+	if launchctl bootstrap "gui/$(id -u)" "$plist" 2> /dev/null; then
+		say "Enabled the periodic save: tmux is saved every 5 minutes, attached or not"
+	else
+		warn "couldn't load $plist now; it starts at your next login"
+	fi
+}
+
 # macOS: a small watcher, run by launchd, saves when macOS announces a logout, restart or shutdown.
 install_launch_agent() {
-	local plist="$HOME/Library/LaunchAgents/$LABEL.plist" bin="$PLUGINS/tmux-restore/bin/tmux-restore-shutdown" path dir lang
+	local plist="$HOME/Library/LaunchAgents/$LABEL.plist" bin="$PLUGINS/tmux-restore/bin/tmux-restore-shutdown"
 	if ! have swiftc; then
-		say "No Swift compiler (Xcode Command Line Tools): tmux is saved every minute, but not at shutdown"
+		say "No Swift compiler (Xcode Command Line Tools): tmux is saved every 5 minutes, but not at shutdown"
 		return 0
 	fi
 	mkdir -p "$(dirname "$bin")" "$(dirname "$plist")"
 	if ! swiftc -O -o "$bin" "$PLUGINS/tmux-restore/scripts/shutdown-watcher.swift" 2> /dev/null; then
-		warn "couldn't build the shutdown watcher; tmux is saved every minute, but not at shutdown"
+		warn "couldn't build the shutdown watcher; tmux is saved every 5 minutes, but not at shutdown"
 		return 0
 	fi
-	# launchd's environment has no UTF-8 locale, and in the C locale tmux turns the tabs in
-	# tmux-resurrect's output into "_", which leaves the save empty.
-	lang=${LC_ALL:-${LANG:-}}
-	case $lang in *[Uu][Tt][Ff]-8 | *[Uu][Tt][Ff]8) ;; *) lang=en_US.UTF-8 ;; esac
-	path=/usr/bin:/bin:/usr/sbin:/sbin # launchd's default PATH lacks Homebrew
-	for dir in /usr/local/bin /opt/homebrew/bin "$(dirname "$(command -v jq || echo /usr/bin/jq)")" "$(dirname "$(command -v tmux)")"; do
-		case ":$path:" in *":$dir:"*) ;; *) path="$dir:$path" ;; esac
-	done
+	launchd_env
 	cat > "$plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -283,7 +322,7 @@ install_launch_agent() {
 	<key>ProgramArguments</key>
 	<array><string>$bin</string><string>$PLUGINS/tmux-restore/scripts/save-now.sh</string></array>
 	<key>EnvironmentVariables</key>
-	<dict><key>PATH</key><string>$path</string><key>LANG</key><string>$lang</string></dict>
+	<dict><key>PATH</key><string>$LAUNCHD_PATH</string><key>LANG</key><string>$LAUNCHD_LANG</string></dict>
 	<key>StandardOutPath</key><string>$HOME/Library/Logs/tmux-restore.log</string>
 	<key>StandardErrorPath</key><string>$HOME/Library/Logs/tmux-restore.log</string>
 	<key>RunAtLoad</key><true/>
@@ -303,14 +342,15 @@ PLIST
 # The unit runs in the systemd user manager, which stops with the user's last login session
 # unless the user lingers. A detached tmux outlives a logout, and then nothing saves it: the
 # minute-by-minute save runs from the status line, which tmux draws only for an attached client.
-# Lingering keeps the shutdown save running for a tmux nobody is attached to or logged in for.
+# Lingering keeps the shutdown save and the 5-minute save running for a tmux nobody is attached
+# to or logged in for.
 enable_linger() {
 	local user=${USER:-$(id -un)}
 	have loginctl || return 0
 	[ "$(loginctl show-user "$user" -p Linger --value 2> /dev/null)" = yes ] && return 0
 	if loginctl enable-linger > /dev/null 2>&1; then
 		{ mkdir -p "$(dirname "$LINGER_MARK")" && : > "$LINGER_MARK"; } 2> /dev/null || true
-		say "Enabled lingering for $user: the shutdown save keeps running after you log out"
+		say "Enabled lingering for $user: the saves keep running after you log out"
 	else
 		warn "couldn't enable lingering: after you log out, a detached tmux is only saved while a client is attached. Run: sudo loginctl enable-linger $user"
 	fi
@@ -330,21 +370,32 @@ disable_linger() {
 
 install_service() {
 	if [ "$(uname -s)" = Darwin ]; then
+		install_save_agent
 		install_launch_agent
 		return
 	fi
 	if ! user_systemd; then
-		[ "$(uname -s)" = Linux ] && say "No systemd user session: tmux is saved every minute, but not at shutdown"
+		[ "$(uname -s)" = Linux ] && say "No systemd user session: tmux is saved every minute while a client is attached, but not otherwise nor at shutdown"
 		return 0
 	fi
-	local dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" legacy
+	local dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" legacy path tool
 	mkdir -p "$dir"
 	sed "s|^ExecStart=.*|ExecStart=\"$PLUGINS/tmux-restore/scripts/shutdown-save.sh\"|" \
 		"$PLUGINS/tmux-restore/systemd/$UNIT" > "$dir/$UNIT"
+	path=/usr/local/bin:/usr/bin:/bin
+	for tool in jq tmux; do
+		have "$tool" && case ":$path:" in *":$(dirname "$(command -v "$tool")"):"*) ;; *) path="$(dirname "$(command -v "$tool")"):$path" ;; esac
+	done
+	sed -e "s|^ExecStart=.*|ExecStart=\"$PLUGINS/tmux-restore/scripts/save-now.sh\" --periodic|" \
+		-e "s|^Environment=PATH=.*|Environment=PATH=$path|" \
+		"$PLUGINS/tmux-restore/systemd/$SAVE_UNIT.service" > "$dir/$SAVE_UNIT.service"
+	cat "$PLUGINS/tmux-restore/systemd/$SAVE_UNIT.timer" > "$dir/$SAVE_UNIT.timer"
 	systemctl --user daemon-reload
 	systemctl --user enable -q "$UNIT"
 	systemctl --user restart "$UNIT"
 	say "Enabled $UNIT: tmux is saved right before shutdown and reboot"
+	systemctl --user enable -q --now "$SAVE_UNIT.timer"
+	say "Enabled $SAVE_UNIT.timer: tmux is saved every 5 minutes, attached or not"
 	enable_linger
 	# An older copy of this setup ran a unit with another name; two at once would save twice.
 	if systemctl --user -q is-enabled tmux-shutdown-save.service 2> /dev/null; then
@@ -374,6 +425,17 @@ uninstall() {
 		launchctl bootout "gui/$(id -u)/$LABEL" 2> /dev/null || true
 		rm -f "$HOME/Library/LaunchAgents/$LABEL.plist"
 		say "Removed the shutdown save ($LABEL)"
+	fi
+	if [ -e "$HOME/Library/LaunchAgents/$SAVE_LABEL.plist" ]; then
+		launchctl bootout "gui/$(id -u)/$SAVE_LABEL" 2> /dev/null || true
+		rm -f "$HOME/Library/LaunchAgents/$SAVE_LABEL.plist"
+		say "Removed the periodic save ($SAVE_LABEL)"
+	fi
+	if [ -e "$dir/$SAVE_UNIT.timer" ]; then
+		user_systemd && systemctl --user disable -q --now "$SAVE_UNIT.timer" 2> /dev/null || true
+		rm -f "$dir/$SAVE_UNIT.timer" "$dir/$SAVE_UNIT.service"
+		user_systemd && systemctl --user daemon-reload || true
+		say "Removed $SAVE_UNIT.timer"
 	fi
 	if [ -e "$dir/$UNIT" ]; then
 		user_systemd && systemctl --user disable -q --now "$UNIT" 2> /dev/null || true

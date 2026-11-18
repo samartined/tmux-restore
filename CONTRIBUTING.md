@@ -9,6 +9,9 @@ tests/hook-unit.sh          # flag filtering, quoting, pre-typed commands (needs
 tests/agents-unit.sh        # every adapter against a fake /proc
 tests/proc-live.sh          # the process helpers against real processes (/proc, or ps and lsof)
 tests/shutdown-unit.sh      # the save at shutdown, with fake gdbus and tmux
+tests/save-now-unit.sh      # the save every 5 minutes while nobody is attached, with fake tmux
+tests/pre-restore-unit.sh   # an empty `last` is pointed back at the newest save with panes
+tests/empty-save-restore.sh # end to end: a save after the server went away doesn't lose the restore
 tests/install-linger.sh     # lingering: on at install, off at uninstall if we turned it on
 tests/install-packages.sh   # on Arch: no partial upgrade, and a clear message if pacman fails
 tests/restore-race.sh       # two restores at once must restore a 29-window save exactly

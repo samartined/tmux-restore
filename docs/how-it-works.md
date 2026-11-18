@@ -72,7 +72,29 @@ as a LaunchAgent. macOS announces a logout, restart or shutdown to running progr
 quit (`NSWorkspace.willPowerOffNotification`), and the watcher saves then. Its log is
 `~/Library/Logs/tmux-restore.log`.
 
-The minute-by-minute saves cover crashes and power loss.
+## Saving while nobody is attached
+
+continuum's save runs from tmux's status line, which tmux draws only for an attached client, so a
+detached tmux (a server reached over SSH, sessions started with `tmux new -d`) wouldn't be saved
+until shutdown. A timer saves it every 5 minutes too: on Linux
+[`tmux-restore-save.timer`](../systemd/tmux-restore-save.timer), on macOS a LaunchAgent
+(`io.github.andrewboldi.tmux-restore.save`). Both run
+[`scripts/save-now.sh --periodic`](../scripts/save-now.sh), which skips a server that started
+less than 5 minutes ago (it may still be restoring) and a save continuum made in the last 4
+minutes.
+
+## A save that finds no panes
+
+A save made after the server went away (at shutdown, when its panes stop before the save runs)
+finds no panes, and resurrect still makes that empty save `last`: the next start would restore
+nothing ([tmux-resurrect#576](https://github.com/tmux-plugins/tmux-resurrect/pull/576)). resurrect
+reads `last` only after its pre-restore-all hook, so
+[`scripts/pre-restore.sh`](../scripts/pre-restore.sh) points an empty `last` back at the newest
+save that has panes. A save of a live server that reads no panes (tmux in the C locale turns
+resurrect's tabs into `_`) is caught earlier: the save hook makes it a copy of `last`, so resurrect
+deletes it, and puts the old scrollback back for the archive resurrect rebuilds next.
+
+The minute-by-minute and 5-minute saves cover crashes and power loss.
 
 ## Restoring
 

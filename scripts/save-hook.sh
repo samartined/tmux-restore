@@ -167,6 +167,24 @@ main() {
 	local -A pane_pids venvs count
 	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private.
 	chmod 700 "$(dirname "$save_file")" 2> /dev/null
+	# No panes means tmux was read wrong (in the C locale tmux turns resurrect's tabs into "_").
+	# resurrect would make this save `last` and lose the good one, so make it a copy of `last`:
+	# resurrect then sees no change and deletes it. It also rebuilds the scrollback archive next,
+	# from save/pane_contents, so put the old scrollback there. (A save after the server went
+	# away never gets here, as resurrect can't look this hook up; scripts/pre-restore.sh mends
+	# `last` for that one.)
+	if ! grep -q $'^pane\t' "$save_file" 2> /dev/null; then
+		local dir last
+		dir=$(dirname "$save_file") last="$(dirname "$save_file")/last"
+		if [[ -s $last && ! $last -ef $save_file ]]; then
+			cat "$last" > "$save_file"
+			if [[ -s $dir/pane_contents.tar.gz ]]; then
+				mkdir -p "$dir/save" && gzip -dc "$dir/pane_contents.tar.gz" | tar xf - -C "$dir/save/" 2> /dev/null
+			fi
+		fi
+		run_next_hook "$save_file"
+		return
+	fi
 	load_agents
 	restore_list
 	ZSH=""
