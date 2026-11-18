@@ -331,14 +331,15 @@ PLIST
 # The unit runs in the systemd user manager, which stops with the user's last login session
 # unless the user lingers. A detached tmux outlives a logout, and then nothing saves it: the
 # minute-by-minute save runs from the status line, which tmux draws only for an attached client.
-# Lingering keeps the shutdown save running for a tmux nobody is attached to or logged in for.
+# Lingering keeps the shutdown save and the 5-minute save running for a tmux nobody is attached
+# to or logged in for.
 enable_linger() {
 	local user=${USER:-$(id -un)}
 	have loginctl || return 0
 	[ "$(loginctl show-user "$user" -p Linger --value 2> /dev/null)" = yes ] && return 0
 	if loginctl enable-linger > /dev/null 2>&1; then
 		{ mkdir -p "$(dirname "$LINGER_MARK")" && : > "$LINGER_MARK"; } 2> /dev/null || true
-		say "Enabled lingering for $user: the shutdown save keeps running after you log out"
+		say "Enabled lingering for $user: the saves keep running after you log out"
 	else
 		warn "couldn't enable lingering: after you log out, a detached tmux is only saved while a client is attached. Run: sudo loginctl enable-linger $user"
 	fi
@@ -366,11 +367,16 @@ install_service() {
 		[ "$(uname -s)" = Linux ] && say "No systemd user session: tmux is saved every minute while a client is attached, but not otherwise nor at shutdown"
 		return 0
 	fi
-	local dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" legacy
+	local dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" legacy path tool
 	mkdir -p "$dir"
 	sed "s|^ExecStart=.*|ExecStart=\"$PLUGINS/tmux-restore/scripts/shutdown-save.sh\"|" \
 		"$PLUGINS/tmux-restore/systemd/$UNIT" > "$dir/$UNIT"
-	sed "s|^ExecStart=.*|ExecStart=\"$PLUGINS/tmux-restore/scripts/save-now.sh\" --periodic|" \
+	path=/usr/local/bin:/usr/bin:/bin
+	for tool in jq tmux; do
+		have "$tool" && case ":$path:" in *":$(dirname "$(command -v "$tool")"):"*) ;; *) path="$(dirname "$(command -v "$tool")"):$path" ;; esac
+	done
+	sed -e "s|^ExecStart=.*|ExecStart=\"$PLUGINS/tmux-restore/scripts/save-now.sh\" --periodic|" \
+		-e "s|^Environment=PATH=.*|Environment=PATH=$path|" \
 		"$PLUGINS/tmux-restore/systemd/$SAVE_UNIT.service" > "$dir/$SAVE_UNIT.service"
 	cat "$PLUGINS/tmux-restore/systemd/$SAVE_UNIT.timer" > "$dir/$SAVE_UNIT.timer"
 	systemctl --user daemon-reload
@@ -417,6 +423,7 @@ uninstall() {
 	if [ -e "$dir/$SAVE_UNIT.timer" ]; then
 		user_systemd && systemctl --user disable -q --now "$SAVE_UNIT.timer" 2> /dev/null || true
 		rm -f "$dir/$SAVE_UNIT.timer" "$dir/$SAVE_UNIT.service"
+		user_systemd && systemctl --user daemon-reload || true
 		say "Removed $SAVE_UNIT.timer"
 	fi
 	if [ -e "$dir/$UNIT" ]; then

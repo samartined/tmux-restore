@@ -12,7 +12,9 @@ cat > "$D/bin/tmux" <<EOF
 case "\$*" in
 has-session*) [ -e "$D/server" ] ;;
 *@resurrect-save-script-path*) echo "$D/save.sh" ;;
+set-option*) echo "\$*" >> "$D/set" ;;
 *@continuum-save-last-timestamp*) cat "$D/continuum" 2> /dev/null ;;
+*@continuum-save-interval*) cat "$D/interval" 2> /dev/null ;;
 *start_time*) cat "$D/started" ;;
 esac
 EOF
@@ -24,11 +26,11 @@ now=$(date +%s)
 # run SERVER STARTED_AGO CONTINUUM_AGO [ARG]: a server or not, started and last saved by continuum
 # that many seconds ago ("" = never); sets rc and saves (what save.sh was called with)
 run() {
-	rm -f "$D/server" "$D/continuum"; : > "$D/saves"
+	rm -f "$D/server" "$D/continuum"; : > "$D/saves"; : > "$D/set"
 	[[ $1 == yes ]] && : > "$D/server"
 	echo $((now - $2)) > "$D/started"
 	[[ -n $3 ]] && echo $((now - $3)) > "$D/continuum"
-	PATH="$D/bin:$PATH" bash "$here/../scripts/save-now.sh" ${4:+"$4"} > /dev/null; rc=$?
+	out=$(PATH="$D/bin:$PATH" "${SAVE_NOW_BASH:-bash}" "$here/../scripts/save-now.sh" ${4:+"$4"}); rc=$?
 	saves=$(cat "$D/saves")
 }
 run no 3600 "" --periodic
@@ -45,4 +47,13 @@ run yes 60 60
 check "shutdown watcher: saves even a new server" quiet "$saves"
 run no 3600 ""
 check "shutdown watcher, no server: no save" "" "$saves"
+run yes 300 "" --periodic
+check "periodic, server exactly 5 minutes old: saves" quiet "$saves"
+check "periodic: tells continuum it saved (no save right after)" "set-option -g @continuum-save-last-timestamp" "$(cut -d' ' -f1-3 "$D/set" | head -1)"
+check "periodic: a good save logs nothing" "" "$out"
+echo 0 > "$D/interval"; run yes 3600 "" --periodic; rm "$D/interval"
+check "periodic, auto-save turned off (@continuum-save-interval 0): no save" "" "$saves"
+printf 'garbage' > "$D/started"; rm -f "$D/continuum"; : > "$D/saves"; : > "$D/server"
+PATH="$D/bin:$PATH" "${SAVE_NOW_BASH:-bash}" "$here/../scripts/save-now.sh" --periodic > /dev/null 2>&1
+check "periodic, unreadable start time: saves (fails open)" quiet "$(cat "$D/saves")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

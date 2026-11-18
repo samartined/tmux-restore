@@ -2,7 +2,7 @@
 Description=Save tmux sessions every 5 minutes, attached or not (tmux-restore)
 
 [Timer]
-OnBootSec=5min
+OnStartupSec=5min
 OnUnitActiveSec=5min
 
 [Install]

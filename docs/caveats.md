@@ -49,10 +49,15 @@ tmux-resurrect checkout has local changes, the installer leaves it alone and you
 **Nobody attached, nobody logged in.** The minute-by-minute save runs from tmux's status line,
 which tmux draws only for an attached client. A detached tmux is saved every 5 minutes instead,
 by a timer ([`tmux-restore-save.timer`](../systemd/tmux-restore-save.timer) on Linux, a
-LaunchAgent on macOS), and at shutdown. Without systemd or launchd, a detached tmux is saved
-only while a client is attached. On Linux, the timer and the shutdown save run in your systemd
-user manager, which stops with your last login session unless your user lingers. The installer enables lingering (`loginctl enable-linger`), and tells you the `sudo`
+LaunchAgent on macOS), and at shutdown. Without a systemd user session (Linux) or a graphical
+login (macOS, where LaunchAgents run), a detached tmux is saved only at shutdown, or not at all.
+On Linux, the timer and the shutdown save run in your systemd user manager, which stops with your
+last login session unless your user lingers. The installer enables lingering (`loginctl enable-linger`), and tells you the `sudo`
 command if it can't. `--uninstall` turns it off again if the installer turned it on.
+
+**One tmux server, on the default socket.** The 5-minute save and the save at shutdown run
+`tmux` outside tmux, so they reach the server on the default socket. A server started with
+`-L`/`-S`, or with `TMUX_TMPDIR` set in your shell only, isn't saved by them.
 
 **Saving at shutdown has a time limit.** logind waits for the save up to `InhibitDelayMaxSec`:
 5 s by default, 30 s on Ubuntu with unattended-upgrades. A save with 40 panes and long scrollback

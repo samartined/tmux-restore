@@ -22,8 +22,8 @@
 </p>
 
 Ever rebooted and lost a dozen tmux windows, along with the agent conversations running in them?
-tmux-restore saves everything every minute while you're attached, every 5 minutes when nobody is,
-and right before shutdown, and puts it back when tmux starts. Panes running Claude Code, Codex, Gemini CLI, opencode or pi reopen the exact
+tmux-restore saves everything every minute while you're attached, every 5 minutes when nobody is
+(with systemd, or a macOS login), and right before shutdown, and puts it back when tmux starts. Panes running Claude Code, Codex, Gemini CLI, opencode or pi reopen the exact
 conversation they were in.
 
 <p align="center">

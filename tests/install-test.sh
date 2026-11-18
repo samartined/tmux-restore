@@ -122,6 +122,7 @@ if [[ $scenario == fresh ]]; then
 		ok "[fresh] unit enabled and started" "grep -q '^--user enable -q tmux-restore.service$' ~/systemctl.log && grep -q '^--user restart tmux-restore.service$' ~/systemctl.log"
 		ok "[fresh] gdbus installed (shutdown save)" "command -v gdbus > /dev/null"
 		ok "[fresh] periodic save unit runs save-now.sh --periodic" "grep -q '^ExecStart=\"$P/tmux-restore/scripts/save-now.sh\" --periodic$' ~/.config/systemd/user/tmux-restore-save.service"
+		ok "[fresh] periodic save unit finds tmux" "grep -q \"^Environment=PATH=.*$(dirname "$(command -v tmux)")\" ~/.config/systemd/user/tmux-restore-save.service"
 		ok "[fresh] periodic save timer written" "grep -q '^OnUnitActiveSec=5min$' ~/.config/systemd/user/tmux-restore-save.timer"
 		ok "[fresh] periodic save timer enabled and started" "grep -q '^--user enable -q --now tmux-restore-save.timer$' ~/systemctl.log"
 	else

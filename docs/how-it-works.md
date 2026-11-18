@@ -85,10 +85,14 @@ minutes.
 
 ## A save that finds no panes
 
-A save made while the server is going away (at shutdown, say) can find no panes. resurrect would
-make that empty save `last`, and the next start would restore nothing. The save hook turns such a
-save into a copy of `last`, so resurrect sees no change and deletes it, and `last` stays the good
-save. A tmux server always has at least one pane, so a real save never has none.
+A save made after the server went away (at shutdown, when its panes stop before the save runs)
+finds no panes, and resurrect still makes that empty save `last`: the next start would restore
+nothing ([tmux-resurrect#576](https://github.com/tmux-plugins/tmux-resurrect/pull/576)). resurrect
+reads `last` only after its pre-restore-all hook, so
+[`scripts/pre-restore.sh`](../scripts/pre-restore.sh) points an empty `last` back at the newest
+save that has panes. A save of a live server that reads no panes (tmux in the C locale turns
+resurrect's tabs into `_`) is caught earlier: the save hook makes it a copy of `last`, so resurrect
+deletes it, and puts the old scrollback back for the archive resurrect rebuilds next.
 
 The minute-by-minute and 5-minute saves cover crashes and power loss.
 

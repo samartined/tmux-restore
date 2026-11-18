@@ -18,6 +18,7 @@ jobs:
       - run: tests/proc-live.sh
       - run: tests/shutdown-unit.sh
       - run: tests/save-now-unit.sh
+      - run: tests/pre-restore-unit.sh
 
   restore:
     runs-on: ubuntu-latest
@@ -35,6 +36,7 @@ jobs:
       - run: tests/login-replay.sh
       - run: tests/restore-lock-release.sh bg-hook
       - run: tests/restore-safety-net.sh
+      - run: tests/empty-save-restore.sh
       - run: tests/venv-restore.sh
 
   install:
@@ -69,7 +71,11 @@ jobs:
       - if: success() || failure() # run every check, to see them all
         run: tests/proc-live.sh
       - if: success() || failure() # run every check, to see them all
-        run: tests/save-now-unit.sh
+        run: SAVE_NOW_BASH=/bin/bash tests/save-now-unit.sh # as the LaunchAgent runs it: bash 3.2
+      - if: success() || failure() # run every check, to see them all
+        run: tests/pre-restore-unit.sh
+      - if: success() || failure() # run every check, to see them all
+        run: tests/empty-save-restore.sh
       - if: success() || failure() # run every check, to see them all
         run: tests/restore-race.sh double
       - if: success() || failure() # run every check, to see them all
