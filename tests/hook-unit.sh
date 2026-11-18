@@ -136,4 +136,30 @@ ln -fs good.txt "$D/rs/last"
 rm "$D/rs/last"; : > "$D/rs/first.txt"
 main "$D/rs/first.txt"
 check "empty save with no last: left as it is" "" "$(cat "$D/rs/first.txt")"
+# While the system shuts down, the panes' programs are being stopped in parallel: a save then
+# (tmux.service saving as it stops) must not replace the good one. The save at shutdown that
+# comes first (scripts/shutdown-save.sh) says so, and is kept.
+ln -fs good.txt "$D/rs/last"
+systemctl() { echo stopping; }
+printf 'pane\tmain\t0\t1\t:*\t0\tzsh\t:/tmp\t1\tzsh\t:\n' > "$D/rs/dying.txt"
+main "$D/rs/dying.txt" 2> /dev/null
+check "save while the system stops: becomes a copy of last" "$(cat "$D/rs/good.txt")" "$(cat "$D/rs/dying.txt")"
+printf 'pane\tmain\t0\t1\t:*\t0\tzsh\t:/tmp\t1\tmake\t:make deploy\n' > "$D/rs/shutdown.txt"
+TMUX_RESTORE_SHUTDOWN_SAVE=1 main "$D/rs/shutdown.txt"
+check "the save at shutdown: kept and rewritten" ":TMUX_RESTORE=1 print -rz -- 'make deploy'" "$(cut -f11 "$D/rs/shutdown.txt")"
+systemctl() { echo running; }
+printf 'pane\tmain\t0\t1\t:*\t0\tzsh\t:/tmp\t1\tzsh\t:\n' > "$D/rs/normal.txt"
+main "$D/rs/normal.txt"
+check "save while running: kept" "$(printf 'pane\tmain\t0\t1\t:*\t0\tzsh\t:/tmp\t1\tzsh\t:')" "$(cat "$D/rs/normal.txt")"
+unset -f systemctl
+# resurrect merges two tabs in a row, so a pane with an empty title is saved shifted: the folder
+# where the title goes, and the pid after the command name. The hook puts a title back.
+printf 'pane\tmain\t0\t1\t:*\t0\t:/srv/app\t1\tclaude\t4242\t:rm -rf build\n' > "$D/save"
+main "$D/save"
+IFS=$'\t' read -r _ _ _ _ _ _ title dir _ cmd full < "$D/save"
+check "empty title: a title back" "$(hostname -s 2> /dev/null || hostname)" "$title"
+check "empty title: folder in its place" ":/srv/app" "$dir"
+check "empty title: command name in its place" "claude" "$cmd"
+check "empty title: command from the wrong pid dropped" ":" "$full"
+check "empty title: 11 fields" 11 "$(awk -F'\t' '{print NF}' "$D/save")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

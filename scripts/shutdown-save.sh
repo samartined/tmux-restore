@@ -11,7 +11,8 @@ while read -r line; do
 	[[ $line == *".PrepareForShutdown (true,)"* ]] || continue
 	if tmux has-session 2>/dev/null; then
 		save=$(tmux show -gqv @resurrect-save-script-path)  # set by tmux-resurrect
-		"${save:-$HOME/.tmux/plugins/tmux-resurrect/scripts/save.sh}" quiet &&
+		# the save hook (scripts/save-hook.sh) drops saves made while the system stops; not this one
+		TMUX_RESTORE_SHUTDOWN_SAVE=1 "${save:-$HOME/.tmux/plugins/tmux-resurrect/scripts/save.sh}" quiet &&
 			echo "tmux sessions saved before shutdown"
 	fi
 	exit 0  # releases the lock (systemd-inhibit exits with us)

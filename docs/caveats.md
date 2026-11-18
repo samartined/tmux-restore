@@ -59,7 +59,9 @@ command if it can't. `--uninstall` turns it off again if the installer turned it
 enables a systemd user unit, `tmux.service`, that starts tmux at boot, and with lingering that
 needs no login, so everything comes back on its own after a power cut. That server gets the
 systemd user manager's environment, not your SSH login's (an SSH agent socket, for one); each
-pane still runs your shell with its startup files. `--uninstall` disables the unit again,
+pane still runs your shell with its startup files. The unit saves as it stops; at shutdown that
+save is dropped (see [how it works](how-it-works.md#a-save-while-the-system-shuts-down)), and the
+one taken before shutdown is kept. `--uninstall` disables the unit again,
 without stopping a running tmux. Not on macOS, where continuum would open Terminal.app for it.
 
 **Claude Code's trust prompts.** A resumed Claude Code session asks again whether to trust its
