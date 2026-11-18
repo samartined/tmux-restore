@@ -449,6 +449,8 @@ install_service() {
 # started, so this never restores over your open sessions).
 load_into_tmux() {
 	tmux has-session 2> /dev/null || return 0
+	# The running server hasn't read the config's new lines; continuum checks this one as it loads.
+	[ -n "$BOOT" ] && tmux set-option -g @continuum-boot on
 	tmux run-shell "$(tpm_path)" && say "Loaded into your running tmux server"
 }
 

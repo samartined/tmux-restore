@@ -18,7 +18,8 @@ agent can follow it step by step.
 
 | Tag | Upstream base | Notes |
 |---|---|---|
-| `fork.2` | `94c8488` | tmux starts at boot on Linux |
+| `fork.3` | `94c8488` | fork.2's start at boot also when installing into a running tmux |
+| `fork.2` | `94c8488` | tmux starts at boot on Linux (only when tmux wasn't running at install: use fork.3) |
 | `fork.1` | `94c8488` | first release |
 
 ## Install (instructions for an agent)
