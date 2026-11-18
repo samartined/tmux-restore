@@ -22,6 +22,7 @@ agent can follow it step by step.
 
 | Tag | Upstream base | Notes |
 |---|---|---|
+| `fork.8` | `94c8488` | the home-folder trust prompt is answered in an 80-column pane too (its text wraps), and only for a `claude --resume <id>` |
 | `fork.7` | `94c8488` | saves keep the visible screen only and are deleted after 2 days |
 | `fork.6` | `94c8488` | fixes a reboot with fork.3–5 restoring no conversation: the save `tmux.service` made as it stopped replaced the good one. Update every Linux machine |
 | `fork.5` | `94c8488` | `last` mended after every save too (two saves in the same second left it pointing at nothing) |

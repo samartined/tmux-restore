@@ -26,6 +26,12 @@ esac
 exit 0
 EOF
 chmod +x "$D/bin/tmux"
+# each pane's pid is its claude's: ps shows its arguments, from $D/args<pid>
+printf '#!/bin/sh\nexit 1\n' > "$D/bin/pgrep"
+printf '#!/bin/sh\ncat "%s/args$4" 2> /dev/null\n' "$D" > "$D/bin/ps"
+chmod +x "$D/bin/pgrep" "$D/bin/ps"
+for p in 101 102 103 104 105 106 107; do echo "claude --resume 1111-2222 --name x" > "$D/args$p"; done
+echo "claude --continue --remote-control" > "$D/args108"
 pass=0 fail=0
 check() { if [[ $2 == "$3" ]]; then pass=$((pass + 1)); else fail=$((fail + 1)); printf 'FAIL %s\n  want: [%s]\n  got:  [%s]\n' "$1" "$2" "$3"; fi; }
 # prompt FOLDER [HEADER] [NOTE]: the workspace-trust prompt as Claude Code shows it
@@ -41,7 +47,11 @@ prompt "$H/dev/x" "" "" > "$D/screen%2"                      # another folder: l
 prompt "$H" "Adding a new directory:" > "$D/screen%3"        # another prompt: left alone
 prompt "$H" > "$D/screen%4"; : > "$D/stuck%4"                # the menu doesn't move: no Enter
 printf '%s\n' "claude is ready" > "$D/screen%5"              # no prompt at all
-printf '%%1\t%s\n%%2\t%s\n%%3\t%s\n%%4\t%s\n%%5\t%s\n%%6\t%s\n' "$H" "$H/dev/x" "$H" "$H" "$H" "$H/dev/x" > "$D/panes"
+printf '%%1\t%s\t101\n%%2\t%s\t102\n%%3\t%s\t103\n%%4\t%s\t104\n%%5\t%s\t105\n%%6\t%s\t106\n%%7\t%s\t107\n%%8\t%s\t108\n' \
+	"$H" "$H/dev/x" "$H" "$H" "$H" "$H/dev/x" "$H" "$H" > "$D/panes"
+# 80 columns with no client attached: Claude Code wraps the note across two lines
+p=$(prompt "$H"); printf '%s\n' "${p/ This is your home folder,/ This is your$'\n' home folder,}" > "$D/screen%7"
+prompt "$H" > "$D/screen%8"                                  # claude --continue: left alone
 prompt "$H" > "$D/screen%6"                                  # the prompt, but working elsewhere
 : > "$D/keys"
 HOME=$H XDG_STATE_HOME=$D/state TMUX_RESTORE_TRUST_SECS=2 PATH="$D/bin:$PATH" bash "$here/../scripts/trust-home.sh"
@@ -51,9 +61,12 @@ check "another kind of prompt: left alone" "" "$(grep '^%3 ' "$D/keys")"
 check "menu didn't move to Yes: no Enter" "%4 Down" "$(grep '^%4 ' "$D/keys")"
 check "no prompt: nothing sent" "" "$(grep '^%5 ' "$D/keys")"
 check "home prompt in a pane working elsewhere: left alone" "" "$(grep '^%6 ' "$D/keys")"
+check "wrapped prompt (80 columns): answered Yes" "%7 Down"$'\n'"%7 Enter" "$(grep '^%7 ' "$D/keys")"
+check "claude --continue: left alone" "" "$(grep '^%8 ' "$D/keys")"
+check "logged: --continue left alone" 1 "$(grep -c "session%8 .*%8 .*left alone: its claude" "$D/state/tmux-restore/trust.log")"
 check "logged: accepted" 1 "$(grep -c "session%1 .*%1 .*trusted $H" "$D/state/tmux-restore/trust.log")"
 check "logged: left alone" 1 "$(grep -c "session%4 .*%4 .*left alone" "$D/state/tmux-restore/trust.log")"
-check "only those two logged" 2 "$(wc -l < "$D/state/tmux-restore/trust.log" | tr -d ' ')"
+check "only those four logged" 4 "$(wc -l < "$D/state/tmux-restore/trust.log" | tr -d ' ')"
 
 # post-restore.sh starts it only with @tmux-restore-trust-home on
 printf '#!/bin/sh\necho started >> "%s/started"\n' "$D" > "$D/fake-trust.sh"; chmod +x "$D/fake-trust.sh"

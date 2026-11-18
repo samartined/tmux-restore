@@ -12,16 +12,37 @@ log=${XDG_STATE_HOME:-$HOME/.local/state}/tmux-restore/trust.log
 handled=" "
 end=$((SECONDS + secs))
 
+# flat SCREEN: the screen as one line, every run of spaces and line breaks made one space. Claude
+# Code wraps its own text to the pane's width (80 columns with no client attached), so a phrase
+# can be split across lines.
+flat() {
+	local IFS=$' \t\n' words
+	read -rd '' -a words <<< "$1"
+	printf '%s' "${words[*]}"
+}
+
 # home_prompt SCREEN: SCREEN is the trust prompt for $HOME, with "No, exit" selected
 home_prompt() {
-	local screen=$1 line folder=""
-	[[ $screen == *"Accessing workspace:"* && $screen == *"This is your home folder"* ]] || return 1
-	[[ $screen == *"❯ No, exit"* && $screen == *"   Yes, I trust this folder"* ]] || return 1
-	while IFS= read -r line; do
-		line=${line#"${line%%[![:space:]]*}"} line=${line%"${line##*[![:space:]]}"}
-		[[ $line == /* ]] && { folder=$line; break; }
-	done <<< "${screen#*Accessing workspace:}"
+	local screen folder
+	screen=$(flat "$1")
+	[[ $screen == *"Accessing workspace: "* && $screen == *"This is your home folder"* ]] || return 1
+	[[ $screen == *"❯ No, exit"* && $screen == *"Yes, I trust this folder"* ]] || return 1
+	[[ $screen != *"❯ Yes, I trust this folder"* ]] || return 1
+	folder=${screen#*Accessing workspace: } folder=${folder%% *}
 	[[ $folder == "$HOME" ]]
+}
+
+# exact PANE_PID: the Claude Code in the pane reopens a given conversation (--resume <id> or
+# --session-id <id>). A plain `claude` or `claude --continue` in $HOME would open whichever
+# conversation was last there, maybe one already open in another pane: left at the prompt.
+exact() {
+	local child
+	for child in $(pgrep -P "$1" 2> /dev/null) "$1"; do
+		case " $(ps -o args= -p "$child" 2> /dev/null) " in
+		*" --resume "[!-]* | *" --resume="?* | *" -r "[!-]* | *" --session-id "[!-]* | *" --session-id="?*) return 0 ;;
+		esac
+	done
+	return 1
 }
 
 note() {
@@ -30,18 +51,22 @@ note() {
 }
 
 while ((SECONDS < end)); do
-	while IFS=$'\t' read -r pane path; do
+	while IFS=$'\t' read -r pane path pid; do
 		[[ $path == "$HOME" && $handled != *" $pane "* ]] || continue
 		home_prompt "$(tmux capture-pane -p -t "$pane")" || continue
 		handled+="$pane "
+		if ! exact "$pid"; then
+			note "$pane" "left alone: its claude doesn't reopen a given conversation (--resume)"
+			continue
+		fi
 		tmux send-keys -t "$pane" Down
 		sleep 0.5
-		if [[ $(tmux capture-pane -p -t "$pane") == *"❯ Yes, I trust this folder"* ]]; then
+		if [[ $(flat "$(tmux capture-pane -p -t "$pane")") == *"❯ Yes, I trust this folder"* ]]; then
 			tmux send-keys -t "$pane" Enter
 			note "$pane" "trusted $HOME (Claude Code's home folder prompt, after a restore)"
 		else
 			note "$pane" "left alone: the prompt's menu didn't move to Yes"
 		fi
-	done < <(tmux list-panes -a -F $'#{pane_id}\t#{pane_current_path}')
+	done < <(tmux list-panes -a -F $'#{pane_id}\t#{pane_current_path}\t#{pane_pid}')
 	sleep 1
 done

@@ -146,7 +146,10 @@ trust prompt after every restore. With `@tmux-restore-trust-home` on, resurrect'
 post-restore-all hook ([`scripts/post-restore.sh`](../scripts/post-restore.sh)) starts
 [`scripts/trust-home.sh`](../scripts/trust-home.sh) in the background. For 2 minutes it looks at
 the panes working in `$HOME`; one that shows exactly the trust prompt for `$HOME`, with "No, exit"
-selected, gets Down, and once "Yes, I trust this folder" is selected, Enter. Each answer goes in
+selected, and runs a `claude --resume <id>` (or `--session-id <id>`), gets Down, and once "Yes, I
+trust this folder" is selected, Enter. It reads the screen with line breaks and runs of spaces
+made one space, since Claude Code wraps its text to the pane's width (80 columns with no client
+attached). Each answer goes in
 `~/.local/state/tmux-restore/trust.log`. See [caveats](caveats.md) for why that's safe.
 
 ## Options
