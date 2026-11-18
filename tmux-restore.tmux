@@ -26,6 +26,12 @@ main() {
 	[ -n "$current" ] && [ "$current" != "$hook" ] && tmux set-option -g @tmux-restore-next-pre-restore-hook "$current"
 	tmux set-option -g @resurrect-hook-pre-restore-all "$hook"
 
+	# After every save, make sure `last` is a save with panes (scripts/post-save.sh).
+	hook="$CURRENT_DIR/scripts/post-save.sh"
+	current=$(option @resurrect-hook-post-save-all)
+	[ -n "$current" ] && [ "$current" != "$hook" ] && tmux set-option -g @tmux-restore-next-post-save-hook "$current"
+	tmux set-option -g @resurrect-hook-post-save-all "$hook"
+
 	# After a restore, answer Claude Code's home-folder trust prompt if @tmux-restore-trust-home is
 	# on (scripts/post-restore.sh).
 	hook="$CURRENT_DIR/scripts/post-restore.sh"

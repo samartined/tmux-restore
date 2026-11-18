@@ -10,7 +10,7 @@ agent can follow it step by step.
 | Change | Why | Upstream status |
 |---|---|---|
 | A timer saves every 5 minutes while nobody is attached (systemd on Linux, a LaunchAgent on macOS) | tmux-continuum saves only while a client is attached, so detached servers were saved only at shutdown | Not proposed yet. Same idea as tmux-plugins/tmux-continuum#157 (Linux only, by hand, unmerged) |
-| An empty `last` (a save made after the server went away) is pointed back at the newest good save before a restore | Otherwise the next start restores nothing: tmux-plugins/tmux-resurrect#576, tmux-plugins/tmux-continuum#166 | Not proposed yet |
+| An empty or dangling `last` (a save after the server went away; two saves in the same second) is pointed back at the newest good save, after every save and before a restore | Otherwise the next start restores nothing: tmux-plugins/tmux-resurrect#576, tmux-plugins/tmux-continuum#166 | Not proposed yet |
 | Answers Claude Code's home-folder trust prompt after a restore (opt-in: `TMUX_RESTORE_TRUST_HOME=1`) | Claude Code never saves trust for `$HOME`, so those sessions waited at the prompt after every restore, out of the app | Fork only |
 | Claude Code sessions keep their name (`--name`) | Other sessions address them by name; a resumed session got a new one | Not proposed yet |
 | tmux starts at boot on Linux (`@continuum-boot`), and `--uninstall` turns that off again | After a power cut everything comes back with nobody logging in | Fork only |
@@ -20,6 +20,7 @@ agent can follow it step by step.
 
 | Tag | Upstream base | Notes |
 |---|---|---|
+| `fork.5` | `94c8488` | `last` mended after every save too (two saves in the same second left it pointing at nothing) |
 | `fork.4` | `94c8488` | home-folder trust answered after a restore (opt-in), session names kept |
 | `fork.3` | `94c8488` | fork.2's start at boot also when installing into a running tmux |
 | `fork.2` | `94c8488` | tmux starts at boot on Linux (only when tmux wasn't running at install: use fork.3) |

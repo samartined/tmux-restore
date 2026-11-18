@@ -499,6 +499,11 @@ uninstall() {
 			tmux set-option -g @resurrect-hook-post-save-layout "$(tmux show-option -gqv @tmux-restore-next-hook)"
 			tmux set-option -gu @tmux-restore-next-hook ;;
 		esac
+		hook=$(tmux show-option -gqv @resurrect-hook-post-save-all)
+		case $hook in */tmux-restore/scripts/post-save.sh)
+			tmux set-option -g @resurrect-hook-post-save-all "$(tmux show-option -gqv @tmux-restore-next-post-save-hook)"
+			tmux set-option -gu @tmux-restore-next-post-save-hook ;;
+		esac
 		hook=$(tmux show-option -gqv @resurrect-hook-post-restore-all)
 		case $hook in */tmux-restore/scripts/post-restore.sh)
 			tmux set-option -g @resurrect-hook-post-restore-all "$(tmux show-option -gqv @tmux-restore-next-post-restore-hook)"

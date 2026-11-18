@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Unit test for scripts/pre-restore.sh with a fake tmux. A save made after the tmux server went
+# Unit test for scripts/pre-restore.sh, scripts/post-save.sh and scripts/mend-last.sh with a fake tmux. A save made after the tmux server went
 # away (at shutdown) is empty, and resurrect makes it `last`; resurrect only reads `last` after
 # this hook, so the hook points `last` back at the newest save that has panes.
 set -u
@@ -54,4 +54,14 @@ mkdir -p "$D/home/.tmux/resurrect"; T=$D/home/.tmux/resurrect
 save "$T" 1; save "$T" 2 empty; ln -s tmux_resurrect_2.txt "$T/last"
 run
 check "\$HOME/.tmux/resurrect, when it exists, is resurrect's default" tmux_resurrect_1.txt "$(readlink "$T/last")"
+# two saves in the same second: one made the file `last`, the other deleted it as unchanged
+rm -rf "$T"; R=$D/home/.local/share/tmux/resurrect; rm -rf "$R"
+save "$R" 1; ln -s tmux_resurrect_9.txt "$R/last"
+run
+check "last points at nothing: mended" tmux_resurrect_1.txt "$(readlink "$R/last")"
+ln -fs tmux_resurrect_9.txt "$R/last"; : > "$D/tmux.log"
+HOME="$D/home" XDG_DATA_HOME="" PATH="$D/bin:$PATH" bash "$here/../scripts/post-save.sh"
+check "post-save hook: mends it too" tmux_resurrect_1.txt "$(readlink "$R/last")"
+rm -rf "$R"; mkdir -p "$R"; run
+check "no saves at all: nothing made up" "" "$(ls -A "$R")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))
