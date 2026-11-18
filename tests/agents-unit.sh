@@ -85,13 +85,44 @@ pane 3 400 "claude --model opus"; pane 4 500 "claude --model opus"; pane 5 600 "
 run
 check "claude: exact id, prompt dropped"       "TMUX_RESTORE=1 claude --resume S1 --model opus"    "${GOT[0]}"
 check "claude: nothing typed yet"              "TMUX_RESTORE=1 claude --session-id S2 --effort max" "${GOT[1]}"
-check "claude: stale entry -> --continue"      "TMUX_RESTORE=1 claude --continue --model opus"     "${GOT[2]}"
+check "claude: stale entry, no conversation -> typed" "TMUX_RESTORE=1 print -rz -- 'claude -c --model opus'" "${GOT[2]}"
 check "claude: same-dir fallbacks -> typed 1"  "TMUX_RESTORE=1 print -rz -- 'claude --model opus'" "${GOT[3]}"
 check "claude: same-dir fallbacks -> typed 2"  "TMUX_RESTORE=1 print -rz -- 'claude --model opus'" "${GOT[4]}"
 check "claude: pane process is the agent"      "TMUX_RESTORE=1 claude --resume S6"                 "${GOT[5]}"
 check "not an agent: safe program unchanged"   "vim notes.txt"                                     "${GOT[6]}"
 SHELL_PATH=/bin/bash run
 check "bash: same-dir fallbacks unchanged"     "claude --model opus"                               "${GOT[3]}"
+
+reset # a claude still at a prompt it shows on start (a folder to trust) isn't registered yet
+U1=0b5e3c1a-1111-4aaa-8bbb-000000000001 U2=0b5e3c1a-2222-4aaa-8bbb-000000000002
+U3=0b5e3c1a-3333-4aaa-8bbb-000000000003
+mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude --resume $U1 --name quiz --remote-control
+mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --resume $U2 --name dup                  # U2 open in pane 2
+mkproc 300 1 /w/c 10 /usr/bin/zsh; mkproc 301 300 /w/c 5200 claude --name live; claude_registry 301 $U2 5200 name=live
+mkproc 400 1 /w/d 10 /usr/bin/zsh; mkproc 401 400 /w/d 5300 claude --resume $U3 --fork-session
+mkproc 500 1 /w/e 10 /usr/bin/zsh; mkproc 501 500 /w/e 5400 claude --resume quiz                            # a search, not an id
+mkproc 600 1 /w/f 10 /usr/bin/zsh; mkproc 601 600 /w/f 5500 claude --continue
+mkproc 700 1 /w/g 10 /usr/bin/zsh; mkproc 701 700 /w/g 5600 claude --session-id=$U3
+mkproc 800 1 /w/h 10 /usr/bin/zsh; mkproc 801 800 /w/h 5700 claude --resume $U1 --model opus; claude_registry 801 S8 1   # stale entry
+: > "$CLAUDE_CONFIG_DIR/projects/-w/$U1.jsonl"
+pane 0 100 "claude --resume $U1 --name quiz --remote-control"; pane 1 200 "claude --resume $U2 --name dup"
+pane 2 300 "claude --name live"; pane 3 400 "claude --resume $U3 --fork-session"; pane 4 500 "claude --resume quiz"
+pane 5 600 "claude --continue"; pane 6 700 "claude --session-id=$U3"; pane 7 800 "claude --resume $U1 --model opus"
+run
+check "claude at a prompt: its --resume id kept"       "TMUX_RESTORE=1 claude --resume $U1 --name quiz --remote-control" "${GOT[0]}"
+check "claude at a prompt: id open elsewhere -> typed" "TMUX_RESTORE=1 print -rz -- 'claude --resume $U2 --name dup'"     "${GOT[1]}"
+check "claude at a prompt: the live one resumes"       "TMUX_RESTORE=1 claude --resume $U2 --name live"                  "${GOT[2]}"
+check "claude at a prompt: --fork-session -> typed"    "TMUX_RESTORE=1 print -rz -- 'claude --resume $U3 --fork-session'" "${GOT[3]}"
+check "claude at a prompt: a search term -> typed"     "TMUX_RESTORE=1 print -rz -- 'claude --resume quiz'"              "${GOT[4]}"
+check "claude at a prompt: --continue -> typed"        "TMUX_RESTORE=1 print -rz -- 'claude --continue'"                 "${GOT[5]}"
+check "claude at a prompt: --session-id=, no transcript" "TMUX_RESTORE=1 claude --session-id $U3"                        "${GOT[6]}"
+check "claude at a prompt: a stale entry's name isn't used" "TMUX_RESTORE=1 claude --resume $U1 --model opus"            "${GOT[7]}"
+
+reset # a Claude Code too old to register sessions: --continue, as before
+mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude -c --model opus
+pane 0 100 "claude -c --model opus"
+run
+check "claude without a registry: --continue" "TMUX_RESTORE=1 claude --continue --model opus" "${GOT[0]}"
 
 reset # one conversation open in two panes: an exact adapter restores both
 mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude; claude_registry 101 S1 5000

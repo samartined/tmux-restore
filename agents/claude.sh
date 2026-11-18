@@ -34,7 +34,8 @@ claude_restart() {
 	printf ' %q' "${ARGV[@]}"
 }
 
-claude_session() {
+# claude_registered PID: the conversation the registry says process PID has open.
+claude_registered() {
 	local sid start
 	read -r sid start < <(jq -r 'select(.kind == "interactive") | "\(.sessionId) \(.procStart)"' \
 		"$(claude_dir)/sessions/$1.json" 2> /dev/null)
@@ -42,6 +43,33 @@ claude_session() {
 	# The start time is a Linux clock-tick count; without /proc, trust the pid.
 	[[ -z $HAVE_PROCFS || $start == "$(proc_start "$1")" ]] || return 1
 	printf '%s\n' "$sid"
+}
+
+claude_session() {
+	claude_registered "$1" && return
+	# Not registered: Claude Code registers a session once it opens it, so this one is still at a
+	# prompt it shows on start (a folder to trust, say), or exiting. If it was started for a given
+	# conversation (--resume <id>, --session-id <id>), that's the one, unless another claude has it
+	# open already.
+	proc_args "$1" || return 1
+	local i arg id="" f pid
+	local uuid='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+	for ((i = 0; i < ${#ARGV[@]}; i++)); do
+		arg=${ARGV[i]}
+		case $arg in
+		--) break ;;
+		--fork-session) return 1 ;; # it would have become a new conversation
+		-r | --resume | --session-id) [[ ${ARGV[i + 1]:-} =~ $uuid ]] && id=${ARGV[i + 1]} ;;
+		--resume=* | --session-id=*) [[ ${arg#*=} =~ $uuid ]] && id=${arg#*=} ;;
+		esac
+	done
+	[[ -n $id ]] || return 1
+	for f in "$(claude_dir)"/sessions/*.json; do
+		[[ -e $f ]] || continue
+		pid=${f##*/} pid=${pid%.json}
+		[[ $pid != "$1" && $(claude_registered "$pid") == "$id" ]] && return 1
+	done
+	printf '%s\n' "$id"
 }
 
 claude_resume() {
@@ -53,14 +81,18 @@ claude_resume() {
 	kept=$(keep_flags claude "${ARGV[@]}")
 	# The session's name is how other sessions address it; a resumed session gets a new one unless
 	# it's given. Keep the one the registry has, unless a flag already names it.
-	name=$(jq -r '.name // empty' "$(claude_dir)/sessions/$pid.json" 2> /dev/null)
+	name=$(jq -r --arg id "$id" 'select(.sessionId == $id) | .name // empty' "$(claude_dir)/sessions/$pid.json" 2> /dev/null)
 	if [[ -n $name && "$kept " != *" -n "* && "$kept " != *" --name "* && $kept != *" --name="* ]]; then
 		kept+=" --name $(printf '%q' "$name")"
 	fi
 	printf 'claude %s %s%s' "$flag" "$id" "$kept"
 }
 
+# Only for a Claude Code too old to register its sessions. One that registers them and has no
+# entry for this process hasn't opened a conversation (see claude_session): --continue would open
+# whichever was last in the folder, maybe one another pane has. That one is typed instead.
 claude_continue() {
+	[[ -d $(claude_dir)/sessions ]] && return 1
 	proc_args "$1" || return 1
 	printf 'claude --continue%s' "$(keep_flags claude "${ARGV[@]}")"
 }

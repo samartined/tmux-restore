@@ -43,6 +43,15 @@ If the id can't be found, the adapter falls back to the agent's "continue the la
 conversation in this directory" command. If two panes would use that fallback in the same
 directory, they'd both reopen the same conversation, so both get the pre-typed command instead.
 
+Claude Code registers a session only once it has opened its conversation, so a `claude` still at
+a prompt it shows on start (a folder to trust, say) has no entry. If it was started for a given
+conversation (`--resume <id>` or `--session-id <id>`, with a real id and no `--fork-session`),
+that conversation is saved, unless another claude has it open already; it keeps it save after
+save until the prompt is answered. Otherwise it comes back typed on the prompt, not as
+`--continue`: that would open whichever conversation was last in the folder, maybe one another
+pane has. `--continue` is only for a Claude Code too old to register sessions. Two panes at a
+prompt that were started for the same conversation both keep it.
+
 ### Python virtual environments
 
 The venv a shell has active can't be seen from outside the shell, so a small hook in your
