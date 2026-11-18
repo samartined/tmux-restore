@@ -65,10 +65,12 @@ reset() {
 }
 
 # --- Claude Code ------------------------------------------------------------------------------
-claude_registry() { # PID SESSION START [no-transcript]
+claude_registry() { # PID SESSION START [no-transcript] [name=NAME]
+	local opts=" ${*:4} " name="" field=""
 	mkdir -p "$CLAUDE_CONFIG_DIR/sessions" "$CLAUDE_CONFIG_DIR/projects/-w"
-	printf '{"pid":%s,"sessionId":"%s","procStart":"%s","kind":"interactive"}\n' "$1" "$2" "$3" > "$CLAUDE_CONFIG_DIR/sessions/$1.json"
-	[[ ${4:-} == no-transcript ]] || : > "$CLAUDE_CONFIG_DIR/projects/-w/$2.jsonl"
+	[[ $opts =~ \ name=([^ ]+) ]] && name=${BASH_REMATCH[1]//_/ } field=",\"name\":\"$name\""
+	printf '{"pid":%s,"sessionId":"%s","procStart":"%s","kind":"interactive"%s}\n' "$1" "$2" "$3" "$field" > "$CLAUDE_CONFIG_DIR/sessions/$1.json"
+	[[ $opts == *" no-transcript "* ]] || : > "$CLAUDE_CONFIG_DIR/projects/-w/$2.jsonl"
 }
 reset
 mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude --model opus 'fix the bug'; claude_registry 101 S1 5000
@@ -98,6 +100,18 @@ pane 0 100 "claude"; pane 1 200 "claude --resume S1"
 run
 check "claude: one conversation in two panes (1)" "TMUX_RESTORE=1 claude --resume S1"                "${GOT[0]}"
 check "claude: one conversation in two panes (2)" "TMUX_RESTORE=1 claude --resume S1"                "${GOT[1]}"
+
+reset # the session's name (how other sessions address it) comes back too
+mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude --model opus; claude_registry 101 S1 5000 name=compapp-db
+mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --name mine; claude_registry 201 S2 5100 name=mine
+mkproc 300 1 /w/c 10 /usr/bin/zsh; mkproc 301 300 /w/c 5200 claude; claude_registry 301 S3 5200 name=two_words
+mkproc 400 1 /w/d 10 /usr/bin/zsh; mkproc 401 400 /w/d 5300 claude -n mine; claude_registry 401 S4 5300 name=mine
+pane 0 100 "claude --model opus"; pane 1 200 "claude --name mine"; pane 2 300 "claude"; pane 3 400 "claude -n mine"
+run
+check "claude: name kept"                       "TMUX_RESTORE=1 claude --resume S1 --model opus --name compapp-db" "${GOT[0]}"
+check "claude: --name isn't added twice"        "TMUX_RESTORE=1 claude --resume S2 --name mine"                  "${GOT[1]}"
+check "claude: a name with a space, quoted"     "TMUX_RESTORE=1 claude --resume S3 --name two\\ words"            "${GOT[2]}"
+check "claude: -n isn't added twice"            "TMUX_RESTORE=1 claude --resume S4 -n mine"                      "${GOT[3]}"
 
 reset # subcommands aren't conversations: Remote Control starts again as it was, the rest are saved as they are
 mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude rc --name 'my box'

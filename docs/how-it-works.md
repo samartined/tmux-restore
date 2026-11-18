@@ -117,6 +117,16 @@ proposed upstream as
 [`tests/restore-race.sh`](../tests/restore-race.sh) restores a 29-window save twice at once:
 upstream gets 2 to 6 windows wrong per run, the branch none.
 
+### Claude Code's home-folder trust prompt
+
+Claude Code never saves trust for the home folder, so a session working in `$HOME` waits at the
+trust prompt after every restore. With `@tmux-restore-trust-home` on, resurrect's
+post-restore-all hook ([`scripts/post-restore.sh`](../scripts/post-restore.sh)) starts
+[`scripts/trust-home.sh`](../scripts/trust-home.sh) in the background. For 2 minutes it looks at
+the panes working in `$HOME`; one that shows exactly the trust prompt for `$HOME`, with "No, exit"
+selected, gets Down, and once "Yes, I trust this folder" is selected, Enter. Each answer goes in
+`~/.local/state/tmux-restore/trust.log`. See [caveats](caveats.md) for why that's safe.
+
 ## Options
 
 tmux-restore sets these only if you haven't set them yourself:
@@ -126,6 +136,7 @@ tmux-restore sets these only if you haven't set them yourself:
 | `@continuum-restore` | `on`: restore when the tmux server starts (the installer also writes it into your config, because continuum reads it before plugins listed after it load) |
 | `@continuum-save-interval` | `1`: save every minute |
 | `@continuum-boot` | `on` on Linux with systemd: tmux starts at boot (the installer writes it into your config) |
+| `@tmux-restore-trust-home` | off; `on` answers Claude Code's home-folder trust prompt after a restore (the installer writes it with `TMUX_RESTORE_TRUST_HOME=1`) |
 | `@resurrect-capture-pane-contents` | `on`: keep scrollback |
 | `@resurrect-save-command-strategy` | `linux_procfs` on Linux: exact command lines |
 

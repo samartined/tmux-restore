@@ -15,7 +15,7 @@ set -u
 here=$(cd "$(dirname "$0")" && pwd)
 scenario=${1:-fresh}
 # fresh installs a pinned ref (as a release tag would be); the other scenarios the default branch
-[[ $scenario == fresh ]] && export TMUX_RESTORE_REF=main
+[[ $scenario == fresh ]] && export TMUX_RESTORE_REF=main TMUX_RESTORE_TRUST_HOME=1
 pass=0 fail=0
 check() { if [[ $2 == "$3" ]]; then pass=$((pass + 1)); echo "ok   $1"; else fail=$((fail + 1)); printf 'FAIL %s\n  want: [%s]\n  got:  [%s]\n' "$1" "$2" "$3"; fi; }
 ok() { if eval "$2"; then check "$1" yes yes; else check "$1" yes no; return 1; fi; }
@@ -160,6 +160,8 @@ if [[ $scenario == fresh ]]; then
 	check "[fresh] hook registered" "$P/tmux-restore/scripts/save-hook.sh" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
 	ok "[fresh] restore marker registered" "tmux show -gqv @resurrect-processes | grep -qF '\"~^TMUX_RESTORE=1 \"'"
 	check "[fresh] continuum restores on start" on "$(tmux show -gqv @continuum-restore)"
+	check "[fresh] post-restore hook registered" "$P/tmux-restore/scripts/post-restore.sh" "$(tmux show -gqv @resurrect-hook-post-restore-all)"
+	check "[fresh] home-folder trust answered (TMUX_RESTORE_TRUST_HOME=1)" on "$(tmux show -gqv @tmux-restore-trust-home)"
 	tmux new-window -d -t main -n work
 	sleep 1
 	tmux send-keys -t main:work 'sleep 4242' Enter
@@ -214,6 +216,7 @@ fi
 if [[ $scenario == running ]]; then
 	check "[running] hook loaded into the running server" "$P/tmux-restore/scripts/save-hook.sh" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
 	ok "[running] restore marker loaded" "tmux show -gqv @resurrect-processes | grep -qF '\"~^TMUX_RESTORE=1 \"'"
+	check "[running] home-folder trust off unless asked for" "" "$(tmux show -gqv @tmux-restore-trust-home)"
 	ok "[running] says it loaded" "grep -q 'Loaded into your running tmux server' ~/install.log"
 	[[ $OS == Linux ]] && ok "[running] no boot at startup without systemd" "! grep -q '@continuum-boot' ~/.tmux.conf"
 	[[ $OS == Linux ]] && ok "[running] no save-at-shutdown without systemd, and says so" "grep -q 'No systemd user session' ~/install.log && [[ ! -e ~/.config/systemd/user/tmux-restore.service ]]"
@@ -229,6 +232,7 @@ if [[ $scenario == running ]]; then
 	bash "$here/../install.sh" --uninstall > ~/uninstall.log 2>&1
 	check "[running] uninstall gives back the save hook" "" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
 	check "[running] ...and the restore hook" "" "$(tmux show -gqv @resurrect-hook-pre-restore-all)"
+	check "[running] ...and the post-restore hook" "" "$(tmux show -gqv @resurrect-hook-post-restore-all)"
 	tmux kill-server
 fi
 if [[ $scenario == existing ]]; then
