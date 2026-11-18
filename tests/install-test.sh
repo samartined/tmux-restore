@@ -14,6 +14,8 @@ set -u
 [[ ${TMUX_RESTORE_SANDBOX:-} == 1 ]] || { echo "refusing to run: this test rewrites ~/.tmux.conf. Set TMUX_RESTORE_SANDBOX=1 on a throwaway machine."; exit 2; }
 here=$(cd "$(dirname "$0")" && pwd)
 scenario=${1:-fresh}
+# fresh installs a pinned ref (as a release tag would be); the other scenarios the default branch
+[[ $scenario == fresh ]] && export TMUX_RESTORE_REF=main
 pass=0 fail=0
 check() { if [[ $2 == "$3" ]]; then pass=$((pass + 1)); echo "ok   $1"; else fail=$((fail + 1)); printf 'FAIL %s\n  want: [%s]\n  got:  [%s]\n' "$1" "$2" "$3"; fi; }
 ok() { if eval "$2"; then check "$1" yes yes; else check "$1" yes no; return 1; fi; }
@@ -85,6 +87,7 @@ if [[ $scenario == fresh && $OS == Linux ]]; then # stand-in for a systemd user 
 	: > ~/systemctl.log
 fi
 
+had_sqlite3=$(command -v sqlite3)
 bash "$here/../install.sh" > ~/install.log 2>&1
 check "[$scenario] installer exits 0" 0 "$?"
 grep -v '^\s*$' ~/install.log | sed 's/^/    | /'
@@ -93,6 +96,14 @@ check "[$scenario] continuum is the last plugin" "set -g @plugin 'tmux-plugins/t
 ok "[$scenario] TPM installed" "[[ -x $P/tpm/tpm ]]"
 ok "[$scenario] tmux-continuum installed" "[[ -f $P/tmux-continuum/continuum.tmux ]]"
 ok "[$scenario] tmux-restore installed" "[[ -f $P/tmux-restore/tmux-restore.tmux ]]"
+if [[ $scenario == fresh ]]; then
+	ok "[fresh] the config pins the ref" "grep -q \"^set -g @plugin '.*tmux-restore#main'$\" ~/.tmux.conf"
+	check "[fresh] checked out at the ref" "$(git ls-remote "$TMUX_RESTORE_SOURCE" refs/heads/main | cut -f1)" "$(git -C "$P/tmux-restore" rev-parse HEAD)"
+fi
+if [[ -z $had_sqlite3 ]]; then
+	ok "[$scenario] sqlite3 isn't installed (that needs root)" "! command -v sqlite3 > /dev/null"
+	ok "[$scenario] ...and it says what that means" "grep -q \"sqlite3 isn't installed\" ~/install.log"
+fi
 if [[ $scenario == dirty ]]; then
 	check "[dirty] resurrect checkout left alone" "https://github.com/tmux-plugins/tmux-resurrect" "$(git -C "$P/tmux-resurrect" remote get-url origin)"
 	ok "[dirty] local change kept" "grep -q '# my change' $P/tmux-resurrect/resurrect.tmux"
@@ -114,6 +125,7 @@ cp ~/.tmux.conf ~/after-first.conf
 bash "$here/../install.sh" > ~/install2.log 2>&1
 check "[$scenario] re-run exits 0" 0 "$?"
 check "[$scenario] re-run leaves the config alone" "$(cat ~/after-first.conf)" "$(cat ~/.tmux.conf)"
+ok "[$scenario] re-run updates the plugin without a warning" "! grep -q \"couldn't \(update\|switch\) $P/tmux-restore\" ~/install2.log"
 
 if [[ $scenario == fresh ]]; then
 	if [[ $OS == Linux ]]; then
