@@ -72,7 +72,25 @@ as a LaunchAgent. macOS announces a logout, restart or shutdown to running progr
 quit (`NSWorkspace.willPowerOffNotification`), and the watcher saves then. Its log is
 `~/Library/Logs/tmux-restore.log`.
 
-The minute-by-minute saves cover crashes and power loss.
+## Saving while nobody is attached
+
+continuum's save runs from tmux's status line, which tmux draws only for an attached client, so a
+detached tmux (a server reached over SSH, sessions started with `tmux new -d`) wouldn't be saved
+until shutdown. A timer saves it every 5 minutes too: on Linux
+[`tmux-restore-save.timer`](../systemd/tmux-restore-save.timer), on macOS a LaunchAgent
+(`io.github.andrewboldi.tmux-restore.save`). Both run
+[`scripts/save-now.sh --periodic`](../scripts/save-now.sh), which skips a server that started
+less than 5 minutes ago (it may still be restoring) and a save continuum made in the last 4
+minutes.
+
+## A save that finds no panes
+
+A save made while the server is going away (at shutdown, say) can find no panes. resurrect would
+make that empty save `last`, and the next start would restore nothing. The save hook turns such a
+save into a copy of `last`, so resurrect sees no change and deletes it, and `last` stays the good
+save. A tmux server always has at least one pane, so a real save never has none.
+
+The minute-by-minute and 5-minute saves cover crashes and power loss.
 
 ## Restoring
 

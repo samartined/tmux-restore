@@ -78,13 +78,17 @@ The save every minute already works. This adds one more save just before the mac
 mkdir -p ~/.config/systemd/user
 cp ~/.tmux/plugins/tmux-restore/systemd/tmux-restore.service ~/.config/systemd/user/
 systemctl --user enable --now tmux-restore.service
+# saves every 5 minutes while nobody is attached
+cp ~/.tmux/plugins/tmux-restore/systemd/tmux-restore-save.{service,timer} ~/.config/systemd/user/
+systemctl --user enable --now tmux-restore-save.timer
 ```
 
-If your plugins aren't in `~/.tmux/plugins`, fix the `ExecStart=` path in the copied file.
+If your plugins aren't in `~/.tmux/plugins`, fix the `ExecStart=` paths in the copied files.
 
 If you leave tmux running when you log out, as on a server you reach over SSH, also run
 `loginctl enable-linger`. tmux only runs the save every minute while a client is attached, and
-without lingering the service stops when you log out.
+without lingering the services (the shutdown save, and the timer that saves every 5 minutes) stop
+when you log out.
 
 **macOS:**
 
@@ -115,6 +119,30 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.andrewboldi.tm
 
 The watcher saves when macOS announces a logout, restart or shutdown. The `LANG` line matters:
 without a UTF-8 locale, the saves come out empty.
+
+To also save every 5 minutes while nobody is attached:
+
+```sh
+d=~/.tmux/plugins/tmux-restore
+cat > ~/Library/LaunchAgents/io.github.andrewboldi.tmux-restore.save.plist <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key><string>io.github.andrewboldi.tmux-restore.save</string>
+	<key>ProgramArguments</key>
+	<array><string>/bin/bash</string><string>$d/scripts/save-now.sh</string><string>--periodic</string></array>
+	<key>EnvironmentVariables</key>
+	<dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string><key>LANG</key><string>en_US.UTF-8</string></dict>
+	<key>StartInterval</key><integer>300</integer>
+	<key>StandardOutPath</key><string>$HOME/Library/Logs/tmux-restore.log</string>
+	<key>StandardErrorPath</key><string>$HOME/Library/Logs/tmux-restore.log</string>
+	<key>LimitLoadToSessionType</key><string>Aqua</string>
+</dict>
+</plist>
+EOF
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.github.andrewboldi.tmux-restore.save.plist
+```
 
 ## 4. Python venvs
 

@@ -51,7 +51,8 @@ tmux kill-server 2> /dev/null
 rm -rf ~/.tmux ~/.tmux.conf* ~/.config/tmux ~/.config/systemd ~/.local/share/tmux ~/fake-bin
 if [[ $OS == Darwin ]]; then
 	launchctl bootout "gui/$(id -u)/$LABEL" 2> /dev/null
-	rm -f ~/Library/LaunchAgents/$LABEL.plist
+	launchctl bootout "gui/$(id -u)/$LABEL.save" 2> /dev/null
+	rm -f ~/Library/LaunchAgents/$LABEL.plist ~/Library/LaunchAgents/$LABEL.save.plist
 fi
 if [[ $scenario == existing || $scenario == dirty ]]; then
 	command -v git > /dev/null || pkg git
@@ -120,11 +121,16 @@ if [[ $scenario == fresh ]]; then
 		ok "[fresh] unit written with the plugin's path" "grep -q '^ExecStart=\"$P/tmux-restore/scripts/shutdown-save.sh\"$' ~/.config/systemd/user/tmux-restore.service"
 		ok "[fresh] unit enabled and started" "grep -q '^--user enable -q tmux-restore.service$' ~/systemctl.log && grep -q '^--user restart tmux-restore.service$' ~/systemctl.log"
 		ok "[fresh] gdbus installed (shutdown save)" "command -v gdbus > /dev/null"
+		ok "[fresh] periodic save unit runs save-now.sh --periodic" "grep -q '^ExecStart=\"$P/tmux-restore/scripts/save-now.sh\" --periodic$' ~/.config/systemd/user/tmux-restore-save.service"
+		ok "[fresh] periodic save timer written" "grep -q '^OnUnitActiveSec=5min$' ~/.config/systemd/user/tmux-restore-save.timer"
+		ok "[fresh] periodic save timer enabled and started" "grep -q '^--user enable -q --now tmux-restore-save.timer$' ~/systemctl.log"
 	else
 		ok "[fresh] flock installed (one restore at a time)" "command -v flock > /dev/null"
 		ok "[fresh] bash 4+ installed (the save hook)" "[[ -x /opt/homebrew/bin/bash || -x /usr/local/bin/bash ]]"
 		ok "[fresh] shutdown watcher built" "[[ -x $P/tmux-restore/bin/tmux-restore-shutdown ]]"
 		ok "[fresh] LaunchAgent written" "plutil -lint ~/Library/LaunchAgents/$LABEL.plist > /dev/null"
+		ok "[fresh] periodic save LaunchAgent written" "plutil -lint ~/Library/LaunchAgents/$LABEL.save.plist > /dev/null && grep -q '<string>--periodic</string>' ~/Library/LaunchAgents/$LABEL.save.plist"
+		ok "[fresh] periodic save LaunchAgent loaded" "launchctl print gui/$(id -u)/$LABEL.save > /dev/null 2>&1"
 	fi
 
 	# A real save, kill-server and automatic restore. In zsh, a command that isn't safe to re-run
@@ -177,6 +183,8 @@ if [[ $scenario == fresh ]]; then
 	check "[fresh] uninstall exits 0" 0 "$?"
 	ok "[fresh] block removed" "! grep -q 'tmux-restore' ~/.tmux.conf"
 	ok "[fresh] unit removed" "[[ ! -e ~/.config/systemd/user/tmux-restore.service ]]"
+	ok "[fresh] periodic save units removed" "[[ ! -e ~/.config/systemd/user/tmux-restore-save.service && ! -e ~/.config/systemd/user/tmux-restore-save.timer ]]"
+	[[ $OS == Darwin ]] && ok "[fresh] periodic save LaunchAgent removed" "[[ ! -e ~/Library/LaunchAgents/$LABEL.save.plist ]] && ! launchctl print gui/$(id -u)/$LABEL.save > /dev/null 2>&1"
 	[[ $OS == Darwin ]] && ok "[fresh] LaunchAgent removed" "[[ ! -e ~/Library/LaunchAgents/$LABEL.plist ]] && ! launchctl print gui/$(id -u)/$LABEL > /dev/null 2>&1"
 	ok "[fresh] plugin removed" "[[ ! -d $P/tmux-restore ]]"
 fi

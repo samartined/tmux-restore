@@ -1,0 +1,9 @@
+[Unit]
+Description=Save tmux sessions, attached or not (tmux-restore)
+
+[Service]
+Type=oneshot
+# tmux-resurrect parses tab-separated tmux output, which tmux mangles without a UTF-8 locale
+Environment=LANG=C.UTF-8
+# install.sh points this at the plugin's real location
+ExecStart=%h/.tmux/plugins/tmux-restore/scripts/save-now.sh --periodic

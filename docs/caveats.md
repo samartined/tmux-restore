@@ -47,9 +47,11 @@ installer points tmux-resurrect at a fork with the concurrent-restore fix. If yo
 tmux-resurrect checkout has local changes, the installer leaves it alone and you don't get the fix.
 
 **Nobody attached, nobody logged in.** The minute-by-minute save runs from tmux's status line,
-which tmux draws only for an attached client, so a detached tmux is saved only at shutdown. That
-save runs in your systemd user manager, which stops with your last login session unless your user
-lingers. The installer enables lingering (`loginctl enable-linger`), and tells you the `sudo`
+which tmux draws only for an attached client. A detached tmux is saved every 5 minutes instead,
+by a timer ([`tmux-restore-save.timer`](../systemd/tmux-restore-save.timer) on Linux, a
+LaunchAgent on macOS), and at shutdown. Without systemd or launchd, a detached tmux is saved
+only while a client is attached. On Linux, the timer and the shutdown save run in your systemd
+user manager, which stops with your last login session unless your user lingers. The installer enables lingering (`loginctl enable-linger`), and tells you the `sudo`
 command if it can't. `--uninstall` turns it off again if the installer turned it on.
 
 **Saving at shutdown has a time limit.** logind waits for the save up to `InhibitDelayMaxSec`:
