@@ -34,7 +34,9 @@ always exact.
 **Flags.** Flags that pick a conversation (`--continue`, `--resume`, `-s`, ...) are replaced.
 Claude Code also keeps its session name (`--name <the name it had>`), which is how other
 sessions address it; without it, a resumed session gets a new one. Remote Control turned on
-from inside a session comes back by itself: `claude --resume` turns it on again.
+from inside a session comes back by itself: `claude --resume` turns it on again. A Claude Code
+still at a prompt it shows on start (not registered yet) keeps the conversation it was started
+for, or comes back typed (see [how it works](how-it-works.md#finding-each-agents-conversation)).
 pi hides its command line, so its flags can't be kept.
 
 **Remote Control and other subcommands.** A pane running Claude Code's Remote Control
