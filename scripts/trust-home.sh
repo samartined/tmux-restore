@@ -5,7 +5,9 @@
 # session only"), so every restored session working in $HOME would wait at that prompt, out of
 # reach of the Claude app. For 2 minutes, this answers "Yes, I trust this folder" in panes that
 # work in $HOME and show exactly that prompt for $HOME, and logs each one. Nothing else is touched:
-# other folders, other prompts, other panes.
+# other folders, other prompts, other panes. A command can be typed later than that, once a
+# question at shell startup is answered (scripts/type-commands.sh): this keeps watching while
+# commands wait to be typed, and for 2 minutes after the last one.
 # Runs with macOS's bash 3.2 too.
 secs=${TMUX_RESTORE_TRUST_SECS:-120}
 log=${XDG_STATE_HOME:-$HOME/.local/state}/tmux-restore/trust.log
@@ -50,7 +52,18 @@ note() {
 	echo "$(date '+%F %T') $(tmux display-message -p -t "$1" '#{session_name}') $1 $2" >> "$log"
 }
 
-while ((SECONDS < end)); do
+# more: keep watching
+more() {
+	((SECONDS < end)) && return 0
+	local last typing
+	last=$(tmux show-option -gqv @tmux-restore-last-typed)
+	[[ $last =~ ^[0-9]+$ ]] && (($(date +%s) - last < secs)) && return 0
+	typing=$(tmux show-option -gqv @tmux-restore-typing)
+	[[ -n $typing ]] && kill -0 "$typing" 2> /dev/null || return 1
+	sleep 4 # nothing typed lately: look less often
+}
+
+while more; do
 	while IFS=$'\t' read -r pane path pid; do
 		[[ $path == "$HOME" && $handled != *" $pane "* ]] || continue
 		home_prompt "$(tmux capture-pane -p -t "$pane")" || continue

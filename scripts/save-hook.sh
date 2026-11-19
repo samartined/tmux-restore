@@ -7,8 +7,8 @@
 #                     doesn't list (btop, nvtop, iotop, nethogs, journalctl -f, ...)
 #   anything else  -> with zsh, typed on the prompt and waiting for Enter; with other shells
 #                     unchanged, and resurrect doesn't re-run it
-# Rewritten commands start with TMUX_RESTORE=1, which tmux-restore.tmux adds to
-# @resurrect-processes so that resurrect runs them.
+# Rewritten commands start with TMUX_RESTORE=1, and after a restore tmux-restore types them
+# itself, each once its pane's shell is ready (scripts/type-commands.sh).
 
 if ((BASH_VERSINFO[0] < 4)); then # macOS ships bash 3.2
 	for b in /opt/homebrew/bin/bash /usr/local/bin/bash; do [[ -x $b ]] && exec "$b" "$0" "$@"; done
@@ -186,7 +186,7 @@ shutting_down() {
 }
 
 main() {
-	local save_file=$1 line cmd target pid venv i title
+	local save_file=$1 line cmd target pid venv i title typing
 	local -a lines out heads cmds keys fields targets
 	local -A pane_pids venvs count pendings
 	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private.
@@ -213,9 +213,13 @@ main() {
 	[[ $(tmux show -gqv default-shell) == */zsh ]] && ZSH=1 # restored panes run default-shell
 	while IFS=$'\t' read -r target pid venv; do pane_pids[$target]=$pid venvs[$target]=$venv; done \
 		< <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{pane_pid}\t#{@tmux-restore-venv}')
-	# the commands a restore hasn't typed yet, waiting for their shell (scripts/type-commands.sh)
-	while IFS=$'\t' read -r target cmd; do [[ -n $cmd ]] && pendings[$target]=$cmd; done \
-		< <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{@tmux-restore-pending}')
+	# the commands a restore hasn't typed yet, waiting for their shell, while
+	# scripts/type-commands.sh still runs to type them
+	typing=$(tmux show -gqv @tmux-restore-typing)
+	if [[ -n $typing ]] && kill -0 "$typing" 2> /dev/null; then
+		while IFS=$'\t' read -r target cmd; do [[ -n $cmd ]] && pendings[$target]=$cmd; done \
+			< <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{@tmux-restore-pending}')
+	fi
 
 	mapfile -t lines < "$save_file"
 	for i in "${!lines[@]}"; do

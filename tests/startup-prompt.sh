@@ -5,6 +5,10 @@
 # the save hook wrote (TMUX_RESTORE=1 ...) must be typed only once the pane's shell is at its
 # prompt: not into the question, then right after it's answered, and kept in saves meanwhile.
 # Here the startup files ask through an outside program reading the terminal, as ssh-add does.
+# Also: a startup busy for a while before it asks, a startup that starts another shell, a shell
+# whose output goes through a process substitution (it says when it's ready through
+# scripts/shell-hook.sh), an entry of the user's in @resurrect-processes that matches the
+# commands (resurrect types those, once), and giving up after TMUX_RESTORE_WAIT_SECS.
 # Throwaway servers in their own socket directory and HOME.
 # PLUGINS_DIR (default ~/.tmux/plugins) must contain tmux-resurrect. Needs zsh.
 set -u
@@ -30,7 +34,13 @@ stty -echo; IFS= read -r answer; stty echo; echo
 printf '%s\n' "\$answer" >> "$D/answers"
 EOF
 chmod +x "$D/ask.sh"
-rc="PS1='$ '; [ -e '$D/ask' ] && '$D/ask.sh' < /dev/tty"
+# $D/<flag> files turn on each case
+rc="PS1='$ '
+[ -e '$D/hook' ] && . '$D/plugins/tmux-restore/scripts/shell-hook.sh'
+[ -e '$D/tee' ] && [ -n \"\$BASH_VERSION\" ] && exec > >(tee -a '$D/tee.log')
+[ -e '$D/busy' ] && { e=\$((SECONDS + 4)); while [ \$SECONDS -lt \$e ]; do :; done; }
+[ -e '$D/ask' ] && '$D/ask.sh' < /dev/tty
+[ -e '$D/nest' ] && [ -n \"\$BASH_VERSION\" ] && zsh"
 echo 'unsetopt GLOBAL_RCS' > "$D/home/.zshenv"
 printf '%s\n' "$rc" > "$D/home/.zshrc"
 printf '%s\n' "$rc" > "$D/home/.bashrc"
@@ -48,7 +58,7 @@ run-shell '$D/plugins/tmux-restore/tmux-restore.tmux'
 EOC
 	shift
 	env -i HOME="$D/home" PATH="$PATH" TERM=xterm-256color LANG="${LANG:-C.UTF-8}" TMUX_TMPDIR="$D/sock" \
-		tmux -L ask -f "$D/test.conf" "$@"
+		${WAIT_SECS:+"TMUX_RESTORE_WAIT_SECS=$WAIT_SECS"} tmux -L ask -f "$D/test.conf" "$@"
 }
 # until_ok [SECS] CMD...: wait up to SECS (default 10) for CMD to succeed
 until_ok() {
@@ -67,6 +77,7 @@ stop() {
 prompt() { t capture-pane -p -t "$1" | grep -q '\$$'; }
 asking() { t capture-pane -p -t "$1" | grep -q 'Enter passphrase for key:'; }
 ran() { [[ -e $D/ran.$1 ]]; }
+times_ran() { cat "$D/ran.$1" 2> /dev/null | wc -l | tr -d ' '; }
 ran_list() { local p out=""; for p in 0 1 2; do ran $p && out+="$p"; done; echo "$out"; }
 pending() { t show-option -pqv -t "$1" @tmux-restore-pending; }
 cmd_of() { awk -F'\t' -v p="$1" '$1 == "pane" && $6 == p { print $11 }' "$D/resurrect/last"; }
@@ -81,7 +92,7 @@ check "... and the option unset if it was the only one" "" "$(t show-option -gqv
 stop
 
 for sh in bash zsh; do
-	rm -rf "$D/resurrect" "$D"/ran.* "$D/answers" "$D/ask"
+	rm -rf "$D/resurrect" "$D"/ran.* "$D/answers" "$D/ask" "$D/busy"
 	start "$(command -v $sh)" new-session -d -s main -c "$D/proj"
 	t split-window -t main:0 -c "$D/proj"
 	t split-window -t main:0 -c "$D/proj"
@@ -91,7 +102,7 @@ for sh in bash zsh; do
 	t run-shell "$D/plugins/tmux-resurrect/scripts/save.sh quiet"
 	# what the save hook writes for an agent, with a command that leaves a mark instead
 	save=$(readlink -f "$D/resurrect/last")
-	awk -F'\t' -v OFS='\t' -v d="$D" '$1 == "pane" { $11 = ":TMUX_RESTORE=1 touch " d "/ran." $6 } { print }' \
+	awk -F'\t' -v OFS='\t' -v d="$D" '$1 == "pane" { $11 = ":TMUX_RESTORE=1 echo x >> " d "/ran." $6 } { print }' \
 		"$save" > "$save.new" && mv "$save.new" "$save" && cp "$save" "$D/crafted.txt"
 	stop
 
@@ -103,18 +114,19 @@ for sh in bash zsh; do
 	stop
 	rm -f "$D"/ran.*
 
-	# 2. The startup asks for a passphrase: nothing is typed into the question
-	: > "$D/ask"
+	# 2. The startup is busy for 4 seconds, then asks for a passphrase: nothing is typed into the
+	# question
+	: > "$D/ask"; : > "$D/busy"
 	start "$(command -v $sh)" new-session -d -s scratch
 	t run-shell "$D/plugins/tmux-resurrect/scripts/restore.sh"
 	until_ok asking main:0.2 || bad "$sh: the startup didn't ask"
 	sleep 4
 	check "$sh: asking, the command isn't given as the answer" "" "$(cat "$D/answers" 2> /dev/null)"
 	check "$sh: asking, nothing ran" "" "$(ran_list)"
-	check "$sh: asking, the command waits" "TMUX_RESTORE=1 touch $D/ran.1" "$(pending main:0.1)"
+	check "$sh: asking, the command waits" "TMUX_RESTORE=1 echo x >> $D/ran.1" "$(pending main:0.1)"
 	# a save meanwhile keeps the commands still waiting
 	t run-shell "$D/plugins/tmux-resurrect/scripts/save.sh quiet"
-	check "$sh: asking, a save keeps the waiting command" ":TMUX_RESTORE=1 touch $D/ran.1" "$(cmd_of 1)"
+	check "$sh: asking, a save keeps the waiting command" ":TMUX_RESTORE=1 echo x >> $D/ran.1" "$(cmd_of 1)"
 	# answered in pane 0 only: its command runs, and only there
 	t send-keys -t main:0.0 -l 'secret'
 	t send-keys -t main:0.0 Enter
@@ -125,8 +137,9 @@ for sh in bash zsh; do
 	check "$sh: the panes not answered still wait" "0" "$(ran_list)"
 	t send-keys -t main:0.1 C-c # given up on: the shell goes on to its prompt
 	until_ok ran 1 || bad "$sh: question cancelled, the command didn't run"
+	check "$sh: each command ran once" "11" "$(times_ran 0)$(times_ran 1)"
 	stop
-	rm -f "$D/ask"
+	rm -f "$D/ask" "$D/busy"
 
 	# 3. Panes that were there before the restore (restoring into a running server) get nothing
 	# typed, as tmux-resurrect does for the programs it restores. (With a single pane in the
@@ -141,5 +154,53 @@ for sh in bash zsh; do
 	sleep 1
 	check "$sh: the panes that were already there: nothing typed" "2" "$(ran_list)"
 	stop
+	[[ $sh == bash ]] || continue
+
+	# 4. An entry of the user's in @resurrect-processes matches the commands: resurrect types
+	# them, and tmux-restore doesn't type them again
+	again() { # again: restore the crafted save on a new server, and wait for each command to run
+		cp "$D/crafted.txt" "$D/resurrect/crafted.txt" && ln -fs crafted.txt "$D/resurrect/last"
+		rm -f "$D"/ran.*
+		start "$(command -v $sh)" new-session -d -s scratch
+		t run-shell "$D/plugins/tmux-resurrect/scripts/restore.sh"
+		until_ok ran 0 && until_ok ran 1 && until_ok ran 2
+	}
+	EXTRA_CONF="set -g @resurrect-processes '\"~ran\"'" again || bad "$sh: a user's entry matches: a command didn't run"
+	sleep 4
+	check "$sh: a user's entry matches: each command ran once" "111" "$(times_ran 0)$(times_ran 1)$(times_ran 2)"
+	stop
+
+	# 5. The startup starts another shell (zsh, without exec): commands go to that one
+	: > "$D/nest"
+	again || bad "$sh: a shell in a shell: a command didn't run"
+	stop
+	rm -f "$D/nest"
+
+	# 6. Output through a process substitution (tee): that process shares the terminal with the
+	# shell, but a shell that sources the shell hook says when it's at its prompt
+	: > "$D/tee"; : > "$D/hook"
+	again || bad "$sh: output through tee, with the shell hook: a command didn't run"
+	stop
+	rm -f "$D/tee" "$D/hook"
+
+	# 7. Nobody answers: after TMUX_RESTORE_WAIT_SECS, the commands are given up, and saves no
+	# longer keep them
+	cp "$D/crafted.txt" "$D/resurrect/crafted.txt" && ln -fs crafted.txt "$D/resurrect/last"
+	rm -f "$D"/ran.* "$D/answers"
+	: > "$D/ask"
+	WAIT_SECS=3 start "$(command -v $sh)" new-session -d -s scratch
+	t run-shell "$D/plugins/tmux-resurrect/scripts/restore.sh"
+	until_ok asking main:0.2 || bad "$sh: the startup didn't ask"
+	sleep 6
+	check "$sh: given up: no longer waiting" "" "$(pending main:0.0)$(pending main:0.1)$(pending main:0.2)"
+	t run-shell "$D/plugins/tmux-resurrect/scripts/save.sh quiet"
+	[[ $(cmd_of 1) != *"ran.1"* ]] || bad "$sh: given up: a save still keeps the command"
+	t send-keys -t main:0.0 -l 'secret'
+	t send-keys -t main:0.0 Enter
+	sleep 4
+	check "$sh: given up: answered later, nothing typed" "secret" "$(cat "$D/answers" 2> /dev/null)"
+	check "$sh: given up: nothing ran" "" "$(ran_list)"
+	stop
+	rm -f "$D/ask"
 done
 echo "passed=$pass failed=$fail"; ((fail == 0))

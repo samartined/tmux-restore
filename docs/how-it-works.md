@@ -144,17 +144,28 @@ before anyone logs in, to anyone whose startup files run keychain or `ssh-add`: 
 So tmux-restore types the commands its save hook wrote (the `TMUX_RESTORE=1` ones) itself. The
 post-restore-all hook ([`scripts/post-restore.sh`](../scripts/post-restore.sh)) starts
 [`scripts/type-commands.sh`](../scripts/type-commands.sh) in the background. It types each
-pane's command once that pane's shell is ready: the shell is the only program in its terminal's
-foreground (`ps` marks those with a `+`; a question is another program, `ssh-add` say), and the
-screen has been still for 2 seconds (or 10 seconds alone, for a prompt with a clock). Until then
-nothing is typed into the pane, and it waits as long as it needs to: answer the question, or give
-it up with Ctrl-C, and the command is typed a couple of seconds later. Meanwhile it's kept in the
-pane option `@tmux-restore-pending`, and a save keeps it as that pane's command, so the
-conversation isn't lost if it waits past the next save. Panes that existed before the restore
-get nothing typed, as with resurrect ([`scripts/pre-restore.sh`](../scripts/pre-restore.sh)
-notes them). Programs resurrect restarts by itself (`vim`, `htop`, your `@resurrect-processes`)
-are still typed by resurrect. With `@resurrect-processes` set to `':all:'`, resurrect types
-everything, these commands included, as soon as each pane exists; with `'false'`, nothing.
+pane's command once that pane's shell waits at its prompt and the screen has been still for 2
+seconds (or after 10 seconds at the prompt, for a prompt with a clock). How it tells:
+
+- A shell that sources [`scripts/shell-hook.sh`](../scripts/shell-hook.sh) says so at its first
+  prompt; then it's at its prompt whenever its process group has the terminal.
+- Otherwise, the terminal's foreground (`ps` marks it with a `+`) must be a single program, a
+  shell, and asleep. A question is another program (`ssh-add`, `sudo`), and a shell still running
+  its startup files is awake now and then. Where `ps` can't list a terminal's programs (BusyBox),
+  it types at once, as resurrect does.
+
+Until then nothing is typed into the pane. Answer the question, or give it up with Ctrl-C, and
+the command is typed a couple of seconds later. A pane waits up to a day
+(`TMUX_RESTORE_WAIT_SECS` in tmux's environment), then its command is dropped. Meanwhile the
+command is kept in the pane option `@tmux-restore-pending`, and while `type-commands.sh` runs, a
+save keeps it as that pane's command, so the conversation isn't lost if it waits past the next
+save. Panes that existed before the restore get nothing typed, as with resurrect
+([`scripts/pre-restore.sh`](../scripts/pre-restore.sh) notes them). Programs resurrect restarts
+by itself (`vim`, `htop`, what your `@resurrect-processes` lists) are still typed by resurrect,
+at once, and so is a `TMUX_RESTORE=1` command that an entry of yours matches (`"~x"` matches `x`
+anywhere): `type-commands.sh` checks with resurrect's own code and leaves those alone, so nothing
+is typed twice. With `@resurrect-processes` set to `':all:'`, resurrect types everything, these
+commands included, as soon as each pane exists; with `'false'`, nothing.
 
 ### The concurrent-restore fix
 
@@ -183,7 +194,10 @@ selected, and runs a `claude --resume <id>` (or `--session-id <id>`), gets Down,
 trust this folder" is selected, Enter. It reads the screen with line breaks and runs of spaces
 made one space, since Claude Code wraps its text to the pane's width (80 columns with no client
 attached). Each answer goes in
-`~/.local/state/tmux-restore/trust.log`. See [caveats](caveats.md) for why that's safe.
+`~/.local/state/tmux-restore/trust.log`. A command can be typed after those 2 minutes, once a
+question at shell startup is answered (see [Typing the commands](#typing-the-commands)), so it
+keeps watching, every few seconds, while commands wait to be typed, and for 2 minutes after the
+last one. See [caveats](caveats.md) for why that's safe.
 
 ## Options
 

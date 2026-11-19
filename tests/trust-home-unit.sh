@@ -14,7 +14,12 @@ case "\$1" in
 list-panes) cat "$D/panes" ;;
 capture-pane) cat "$D/screen\${4}" ;;
 display-message) echo "session\${4}" ;;
-show-option) [[ \$3 == @tmux-restore-trust-home ]] && cat "$D/option" 2> /dev/null ;;
+show-option)
+	case \$3 in
+	@tmux-restore-trust-home) cat "$D/option" 2> /dev/null ;;
+	@tmux-restore-typing) cat "$D/typing-pid" 2> /dev/null ;;
+	@tmux-restore-last-typed) cat "$D/last-typed" 2> /dev/null ;;
+	esac ;;
 send-keys)
 	echo "\$3 \$4" >> "$D/keys"
 	if [[ \$4 == Down && ! -e "$D/stuck\$3" ]]; then
@@ -67,6 +72,25 @@ check "logged: --continue left alone" 1 "$(grep -c "session%8 .*%8 .*left alone:
 check "logged: accepted" 1 "$(grep -c "session%1 .*%1 .*trusted $H" "$D/state/tmux-restore/trust.log")"
 check "logged: left alone" 1 "$(grep -c "session%4 .*%4 .*left alone" "$D/state/tmux-restore/trust.log")"
 check "only those four logged" 4 "$(wc -l < "$D/state/tmux-restore/trust.log" | tr -d ' ')"
+
+# A command typed late (its shell's startup asked something, answered after a while): it keeps
+# watching while scripts/type-commands.sh still waits to type commands, and stops after that.
+: > "$D/keys"; rm -f "$D/state/tmux-restore/trust.log"
+printf '%%9\t%s\t109\n' "$H" > "$D/panes"
+echo "claude --resume 3333-4444" > "$D/args109"
+echo "zsh" > "$D/screen%9"
+sleep 60 & typing=$!
+echo $typing > "$D/typing-pid"
+HOME=$H XDG_STATE_HOME=$D/state TMUX_RESTORE_TRUST_SECS=1 PATH="$D/bin:$PATH" bash "$here/../scripts/trust-home.sh" &
+watcher=$!
+sleep 2.5                      # past its own time
+prompt "$H" > "$D/screen%9"    # claude typed late, at the prompt
+sleep 6                        # it looks every 5 seconds while it waits
+check "typed late: answered" "%9 Down"$'\n'"%9 Enter" "$(grep '^%9 ' "$D/keys")"
+kill $typing; wait $typing 2> /dev/null
+sleep 6
+check "nothing left to type: it stopped" "" "$(kill -0 $watcher 2> /dev/null && echo running)"
+kill $watcher 2> /dev/null
 
 # post-restore.sh starts it only with @tmux-restore-trust-home on; scripts/type-commands.sh, always
 printf '#!/bin/sh\necho started >> "%s/started"\n' "$D" > "$D/fake-trust.sh"; chmod +x "$D/fake-trust.sh"
