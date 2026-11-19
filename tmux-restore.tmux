@@ -47,13 +47,17 @@ main() {
 	started=$(tmux display-message -p '#{start_time}')
 	[ -n "$started" ] && [ $(($(date +%s) - started)) -le 10 ] && tmux run-shell -b "$CURRENT_DIR/scripts/restore-safety-net.sh"
 
-	# Commands the hook writes start with TMUX_RESTORE=1: have resurrect run them on restore,
-	# unless you turned off restoring programs ('false') or restore all of them (':all:').
+	# Commands the hook writes start with TMUX_RESTORE=1, and after a restore tmux-restore types
+	# them itself, each once its shell is ready (scripts/type-commands.sh). Earlier versions had
+	# resurrect type them, through this entry in @resurrect-processes: take it out, or they would
+	# be typed twice.
 	local procs marker='"~^TMUX_RESTORE=1 "'
 	procs=$(option @resurrect-processes)
 	case $procs in
-	false | :all: | *"$marker"*) ;;
-	*) tmux set-option -g @resurrect-processes "${procs:+$procs }$marker" ;;
+	*"$marker"*)
+		procs=$(printf '%s' "${procs//"$marker"/}" | sed 's/  */ /g; s/^ //; s/ $//')
+		if [ -n "$procs" ]; then tmux set-option -g @resurrect-processes "$procs"; else tmux set-option -gu @resurrect-processes; fi
+		;;
 	esac
 }
 main

@@ -40,7 +40,7 @@ PANES=() SAVE=() SHELL_PATH=/usr/bin/zsh NEXT_HOOK=""
 tmux() {
 	case $1 in
 	show) case ${3:-} in default-shell) echo "$SHELL_PATH" ;; @tmux-restore-next-hook) echo "$NEXT_HOOK" ;; esac ;;
-	list-panes) printf '%s\n' "${PANES[@]}" ;;
+	list-panes) [[ $* == *@tmux-restore-pending* ]] || printf '%s\n' "${PANES[@]}" ;; # no command waiting
 	esac
 }
 # pane WINDOW PANE_PID SAVED_CMD: a pane in session "main", as tmux and the save file see it

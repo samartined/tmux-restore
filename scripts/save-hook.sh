@@ -188,7 +188,7 @@ shutting_down() {
 main() {
 	local save_file=$1 line cmd target pid venv i title
 	local -a lines out heads cmds keys fields targets
-	local -A pane_pids venvs count
+	local -A pane_pids venvs count pendings
 	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private.
 	chmod 700 "$(dirname "$save_file")" 2> /dev/null
 	# No panes means tmux was read wrong (in the C locale tmux turns resurrect's tabs into "_").
@@ -213,6 +213,9 @@ main() {
 	[[ $(tmux show -gqv default-shell) == */zsh ]] && ZSH=1 # restored panes run default-shell
 	while IFS=$'\t' read -r target pid venv; do pane_pids[$target]=$pid venvs[$target]=$venv; done \
 		< <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{pane_pid}\t#{@tmux-restore-venv}')
+	# the commands a restore hasn't typed yet, waiting for their shell (scripts/type-commands.sh)
+	while IFS=$'\t' read -r target cmd; do [[ -n $cmd ]] && pendings[$target]=$cmd; done \
+		< <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{@tmux-restore-pending}')
 
 	mapfile -t lines < "$save_file"
 	for i in "${!lines[@]}"; do
@@ -240,6 +243,12 @@ main() {
 		target="${fields[1]}:${fields[2]}.${fields[5]}"
 		targets[i]=$target
 		rewrite "${pane_pids[$target]:-}" "${cmds[i]}"
+		# still waiting for its shell (its startup asked something nobody has answered yet): what
+		# runs there now is that startup, so keep the command the restore is waiting to type
+		if [[ -n ${pendings[$target]:-} ]]; then
+			NEW=${pendings[$target]} KEY=""
+			unset 'targets[i]' # nor a venv put in front again: it already has its own
+		fi
 		out[i]="${heads[i]}"$'\t'":$NEW"
 		keys[i]=$KEY
 		[[ -n $KEY ]] && count[$KEY]=$((${count[$KEY]:-0} + 1))

@@ -68,11 +68,18 @@ check "logged: accepted" 1 "$(grep -c "session%1 .*%1 .*trusted $H" "$D/state/tm
 check "logged: left alone" 1 "$(grep -c "session%4 .*%4 .*left alone" "$D/state/tmux-restore/trust.log")"
 check "only those four logged" 4 "$(wc -l < "$D/state/tmux-restore/trust.log" | tr -d ' ')"
 
-# post-restore.sh starts it only with @tmux-restore-trust-home on
+# post-restore.sh starts it only with @tmux-restore-trust-home on; scripts/type-commands.sh, always
 printf '#!/bin/sh\necho started >> "%s/started"\n' "$D" > "$D/fake-trust.sh"; chmod +x "$D/fake-trust.sh"
-run_post() { rm -f "$D/started"; TMUX_RESTORE_TRUST_HOME_SCRIPT=$D/fake-trust.sh PATH="$D/bin:$PATH" bash "$here/../scripts/post-restore.sh"; sleep 0.5; }
+printf '#!/bin/sh\necho typing >> "%s/typing"\n' "$D" > "$D/fake-type.sh"; chmod +x "$D/fake-type.sh"
+run_post() {
+	rm -f "$D/started" "$D/typing"
+	TMUX_RESTORE_TRUST_HOME_SCRIPT=$D/fake-trust.sh TMUX_RESTORE_TYPE_SCRIPT=$D/fake-type.sh PATH="$D/bin:$PATH" bash "$here/../scripts/post-restore.sh"
+	sleep 0.5
+}
 rm -f "$D/option"; run_post
 check "option off: not started" "" "$(cat "$D/started" 2> /dev/null)"
+check "option off: commands typed anyway" typing "$(cat "$D/typing" 2> /dev/null)"
 echo on > "$D/option"; run_post
 check "option on: started" started "$(cat "$D/started" 2> /dev/null)"
+check "option on: commands typed too" typing "$(cat "$D/typing" 2> /dev/null)"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

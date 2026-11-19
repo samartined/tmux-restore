@@ -29,9 +29,10 @@ when they follow logs (`-f`, `--follow`, or a group of short flags with `f` in i
 So does anything run with `sudo`, which would ask for a password.
 
 The initial prompt and the flags that pick a conversation (`--continue`, `--resume`, ...) are
-dropped from an agent's command. A rewritten command starts with `TMUX_RESTORE=1 `, and
-tmux-restore adds that prefix to resurrect's list of programs to re-run. With a shell other than
-zsh, "anything else" is left unchanged, so resurrect doesn't re-run it.
+dropped from an agent's command. A rewritten command starts with `TMUX_RESTORE=1 `, and after a
+restore tmux-restore types it into its pane itself, once the pane's shell is ready (see
+[Typing the commands](#typing-the-commands)). With a shell other than zsh, "anything else" is left
+unchanged, so resurrect doesn't re-run it.
 
 ### Finding each agent's conversation
 
@@ -132,6 +133,29 @@ The minute-by-minute and 5-minute saves cover crashes and power loss.
 When the tmux server starts, continuum runs resurrect's restore. Sessions, windows, layouts and
 scrollback come back, then the saved commands run, including each agent's resume command.
 
+### Typing the commands
+
+tmux-resurrect types each program it restores into its pane as soon as the pane exists. If the
+shell's startup asks something first, that question gets the keys instead: the command is lost,
+handed to the question as its answer. That happens when tmux starts at boot (`@continuum-boot`),
+before anyone logs in, to anyone whose startup files run keychain or `ssh-add`: each pane stops at
+"Enter passphrase", and an agent's resume command becomes a wrong passphrase.
+
+So tmux-restore types the commands its save hook wrote (the `TMUX_RESTORE=1` ones) itself. The
+post-restore-all hook ([`scripts/post-restore.sh`](../scripts/post-restore.sh)) starts
+[`scripts/type-commands.sh`](../scripts/type-commands.sh) in the background. It types each
+pane's command once that pane's shell is ready: the shell is the only program in its terminal's
+foreground (`ps` marks those with a `+`; a question is another program, `ssh-add` say), and the
+screen has been still for 2 seconds (or 10 seconds alone, for a prompt with a clock). Until then
+nothing is typed into the pane, and it waits as long as it needs to: answer the question, or give
+it up with Ctrl-C, and the command is typed a couple of seconds later. Meanwhile it's kept in the
+pane option `@tmux-restore-pending`, and a save keeps it as that pane's command, so the
+conversation isn't lost if it waits past the next save. Panes that existed before the restore
+get nothing typed, as with resurrect ([`scripts/pre-restore.sh`](../scripts/pre-restore.sh)
+notes them). Programs resurrect restarts by itself (`vim`, `htop`, your `@resurrect-processes`)
+are still typed by resurrect. With `@resurrect-processes` set to `':all:'`, resurrect types
+everything, these commands included, as soon as each pane exists; with `'false'`, nothing.
+
 ### The concurrent-restore fix
 
 tmux-resurrect restores a pane with "pane missing, window exists: split the window". If two
@@ -176,9 +200,12 @@ tmux-restore sets these only if you haven't set them yourself:
 | `@resurrect-delete-backup-after` | `1`: saves are deleted once 2 days old (resurrect counts whole days past 1), always keeping the newest 5 |
 | `@resurrect-save-command-strategy` | `linux_procfs` on Linux: exact command lines |
 
-It always sets two tmux-resurrect hooks, and a hook you already had there runs after its own:
-`@resurrect-hook-post-save-layout` (the save hook) and `@resurrect-hook-pre-restore-all`, which
-marks that a restore started. tmux-continuum skips its restore at startup if it counts other tmux
+It always sets four tmux-resurrect hooks, and a hook you already had there runs after its own:
+`@resurrect-hook-post-save-layout` (the save hook), `@resurrect-hook-post-save-all` (mends
+`last`), `@resurrect-hook-pre-restore-all`, which marks that a restore started, and
+`@resurrect-hook-post-restore-all`, which types the saved commands. Versions before fork.10 added
+`"~^TMUX_RESTORE=1 "` to `@resurrect-processes` so that resurrect typed them; the plugin takes it
+out. tmux-continuum skips its restore at startup if it counts other tmux
 processes, and it can count the new server's own short-lived forks; if no restore has started
 three seconds after the server did, tmux-restore runs it, under continuum's other conditions
 ([`scripts/restore-safety-net.sh`](../scripts/restore-safety-net.sh)).
@@ -190,6 +217,7 @@ three seconds after the server did, tmux-restore runs it, under continuum's othe
 | [`install.sh`](../install.sh) | installs everything and edits your tmux config (`--uninstall` undoes it) |
 | [`tmux-restore.tmux`](../tmux-restore.tmux) | the plugin: sets the options above |
 | [`scripts/save-hook.sh`](../scripts/save-hook.sh) | rewrites saved commands |
+| [`scripts/type-commands.sh`](../scripts/type-commands.sh) | after a restore, types each saved command once its shell is ready |
 | [`scripts/shell-hook.sh`](../scripts/shell-hook.sh) | tells tmux which Python venv each pane has active |
 | [`scripts/lib.sh`](../scripts/lib.sh) | process inspection (`/proc`, or `ps`/`lsof`) and flag filtering |
 | [`agents/*.sh`](../agents) | one adapter per agent |

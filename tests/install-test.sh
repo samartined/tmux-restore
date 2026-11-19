@@ -151,14 +151,15 @@ if [[ $scenario == fresh ]]; then
 	fi
 
 	# A real save, kill-server and automatic restore. In zsh, a command that isn't safe to re-run
-	# must come back typed on the prompt, which proves resurrect ran the hook's TMUX_RESTORE=1 line.
+	# must come back typed on the prompt, which proves tmux-restore typed the hook's TMUX_RESTORE=1
+	# line (scripts/type-commands.sh).
 	command -v zsh > /dev/null || pkg zsh
 	touch ~/.zshrc
 	echo "set -g default-shell $(command -v zsh)" >> ~/.tmux.conf
 	tmux new-session -d -s main -n first
 	sleep 3
 	check "[fresh] hook registered" "$P/tmux-restore/scripts/save-hook.sh" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
-	ok "[fresh] restore marker registered" "tmux show -gqv @resurrect-processes | grep -qF '\"~^TMUX_RESTORE=1 \"'"
+	ok "[fresh] resurrect leaves the hook's commands to tmux-restore" "! tmux show -gqv @resurrect-processes | grep -qF TMUX_RESTORE"
 	check "[fresh] continuum restores on start" on "$(tmux show -gqv @continuum-restore)"
 	check "[fresh] only the visible screen saved" visible "$(tmux show -gqv @resurrect-pane-contents-area)"
 	check "[fresh] saves deleted after 2 days" 1 "$(tmux show -gqv @resurrect-delete-backup-after)"
@@ -195,8 +196,10 @@ if [[ $scenario == fresh ]]; then
 		echo "    --- restoring by hand:"
 		bash -x "$(tmux show -gqv @resurrect-restore-script-path)" 2>&1 | tail -25 | sed 's/^/    | /'
 	fi
+	# typed once the pane's shell is at its prompt and has been still for a moment
+	for _ in $(seq 20); do tmux capture-pane -p -t main:work | grep -qF 'sleep 4242' && break; sleep 0.5; done
 	screen=$(tmux capture-pane -p -t main:work)
-	ok "[fresh] resurrect ran the hook's command" "grep -qF \"TMUX_RESTORE=1 print -rz -- 'sleep 4242'\" <<< \"\$screen\""
+	ok "[fresh] tmux-restore typed the hook's command" "grep -qF \"TMUX_RESTORE=1 print -rz -- 'sleep 4242'\" <<< \"\$screen\""
 	check "[fresh] command typed on the prompt" "sleep 4242" "$(grep -v '^[[:space:]]*$' <<< "$screen" | tail -1 | grep -o 'sleep 4242$')"
 	check "[fresh] ...and not run" zsh "$(tmux display -p -t main:work '#{pane_current_command}')"
 	tmux kill-server
@@ -218,7 +221,7 @@ if [[ $scenario == fresh ]]; then
 fi
 if [[ $scenario == running ]]; then
 	check "[running] hook loaded into the running server" "$P/tmux-restore/scripts/save-hook.sh" "$(tmux show -gqv @resurrect-hook-post-save-layout)"
-	ok "[running] restore marker loaded" "tmux show -gqv @resurrect-processes | grep -qF '\"~^TMUX_RESTORE=1 \"'"
+	ok "[running] resurrect leaves the hook's commands to tmux-restore" "! tmux show -gqv @resurrect-processes | grep -qF TMUX_RESTORE"
 	check "[running] home-folder trust off unless asked for" "" "$(tmux show -gqv @tmux-restore-trust-home)"
 	ok "[running] says it loaded" "grep -q 'Loaded into your running tmux server' ~/install.log"
 	[[ $OS == Linux ]] && ok "[running] no boot at startup without systemd" "! grep -q '@continuum-boot' ~/.tmux.conf"

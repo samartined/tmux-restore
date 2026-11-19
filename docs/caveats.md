@@ -25,6 +25,15 @@ call or command it was running at the time.
 changes them, its panes fall back to "continue the latest conversation in this directory", or to
 a pre-typed command.
 
+**A question at shell startup holds its pane's command.** If your shell's startup asks
+something (keychain or `ssh-add` asking for a key's passphrase, a GPG pinentry), a restore at boot
+leaves each pane at that question, and its command, an agent resuming its conversation included,
+waits until you answer it or press Ctrl-C there; it's typed a couple of seconds later. Nothing is
+typed into the question. For the agents to come back with nobody there, don't ask inside tmux at
+boot: with keychain, `keychain --noask` adds the agent but no key, and you add it with `ssh-add`
+when you need it. A question the shell asks with its own `read` can't be told from its prompt, and
+gets the command as its answer, as before.
+
 **Pre-typed commands need zsh.** With another shell, a command that isn't safe to re-run comes
 back as an empty prompt.
 

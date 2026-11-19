@@ -39,6 +39,7 @@ jobs:
       - run: tests/restore-safety-net.sh
       - run: tests/empty-save-restore.sh
       - run: tests/venv-restore.sh
+      - run: tests/startup-prompt.sh
 
   install:
     runs-on: ubuntu-latest
@@ -87,3 +88,5 @@ jobs:
         run: tests/restore-safety-net.sh
       - if: success() || failure() # run every check, to see them all
         run: tests/login-replay.sh
+      - if: success() || failure() # run every check, to see them all
+        run: tests/startup-prompt.sh
