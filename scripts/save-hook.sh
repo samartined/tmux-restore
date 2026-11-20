@@ -189,7 +189,9 @@ main() {
 	local save_file=$1 line cmd target pid venv i title typer
 	local -a lines out heads cmds keys fields targets
 	local -A pane_pids venvs count pendings
-	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private.
+	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private,
+	# and what this writes too (scripts/private-saves.sh does the files resurrect writes).
+	umask 077
 	chmod 700 "$(dirname "$save_file")" 2> /dev/null
 	# No panes means tmux was read wrong (in the C locale tmux turns resurrect's tabs into "_").
 	# resurrect would make this save `last` and lose the good one, so keep `last`. (A save after
@@ -279,6 +281,8 @@ main() {
 		out[i]="${heads[i]}"$'\t'":$cmd"
 	done
 	((${#out[@]})) && printf '%s\n' "${out[@]}" > "$save_file.tmp" && mv -f "$save_file.tmp" "$save_file"
+	# No session or window name a shell would read as code (scripts/safe-names.sh says why)
+	"$ROOT/scripts/safe-names.sh" "$save_file"
 	run_next_hook "$save_file"
 }
 

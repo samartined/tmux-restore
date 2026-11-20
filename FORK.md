@@ -17,6 +17,9 @@ agent can follow it step by step.
 | A Claude Code still at a prompt on start keeps the conversation it was started for (`--resume <id>`), or comes back typed, never as `--continue` | It isn't registered until the prompt is answered: it was saved as `--continue`, which opened another pane's conversation | Not proposed yet |
 | A save made while the system shuts down is dropped, and a pane with an empty title is saved unshifted | At shutdown `tmux.service` saved after the panes' programs had stopped, and an empty title shifted resurrect's fields: a reboot restored panes with no conversation, in the wrong folder | Not proposed yet. The empty title is a tmux-resurrect bug |
 | tmux-restore types the saved commands itself after a restore, each once its pane's shell is at its prompt, instead of resurrect typing them as soon as the pane exists | At boot, a shell whose startup asks for a passphrase (keychain, `ssh-add`) took the agent's resume command as the passphrase: the conversation didn't come back and was gone from the next save | Not proposed yet |
+| Session and window names lose `'` `"` `` ` `` `$` `\` `;` `&` `\|` `<` `>` `(` `)` in saves, old saves included | tmux-resurrect puts the session name into a command it runs through the shell to show a pane's saved contents, which this fork turns on: a name with them could run code at restore | Not proposed yet. The cause is in tmux-resurrect |
+| Conversation ids from Gemini CLI, opencode and Claude Code are taken only in their own form, and quoted | An id from the agent's files went as it was into the command typed at restore | Not proposed yet |
+| The save folder is made 700 before the first save, and the saves 600 after every save | Every pane's command line and screen were readable by others until the hook first ran, and the files always | Not proposed yet |
 | `tmux.service` (`@continuum-boot`) saves as it stops only when you stop it yourself: a drop-in points its save at `scripts/stop-save.sh` | At shutdown that save came once the server was gone: empty, and in the same second as the save before shutdown it deleted that one. `last` pointed at nothing and nothing was restored | Fork only (the boot unit is continuum's, turned on by this fork) |
 | tmux starts at boot on Linux (`@continuum-boot`), and `--uninstall` turns that off again | After a power cut everything comes back with nobody logging in | Fork only |
 | The installer installs this fork, can pin a ref (`TMUX_RESTORE_REF`), and doesn't install sqlite3 | One version on every machine; sqlite3 (opencode only) needed root | Fork only |
@@ -25,6 +28,7 @@ agent can follow it step by step.
 
 | Tag | Upstream base | Notes |
 |---|---|---|
+| `fork.12` | `94c8488` | fixes from a security review: session and window names safe for the shell, conversation ids checked and quoted, saves readable by you only |
 | `fork.11` | `94c8488` | at shutdown `tmux.service` doesn't save a second time, which could delete the first save and leave nothing to restore; a broken `last` is mended before any restore |
 | `fork.10` | `94c8488` | saved commands are typed once each pane's shell is at its prompt: a startup asking for a passphrase no longer swallows them |
 | `fork.9` | `94c8488` | a Claude Code at a prompt on start keeps its conversation, never becomes `--continue` |

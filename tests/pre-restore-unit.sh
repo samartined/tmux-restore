@@ -66,4 +66,26 @@ HOME="$D/home" XDG_DATA_HOME="" PATH="$D/bin:$PATH" bash "$here/../scripts/post-
 check "post-save hook: mends it too" tmux_resurrect_1.txt "$(readlink "$R/last")"
 rm -rf "$R"; mkdir -p "$R"; run
 check "no saves at all: nothing made up" "" "$(ls -A "$R")"
+
+# A save made before session names were made safe (the security review's finding 1): before
+# resurrect reads it, the names in the save `last` points at lose what a shell treats specially.
+printf '%s\n' "pane	x'; cd; touch MARK; '	0	1	:*	0	t	:/tmp	1	zsh	:" > "$R/tmux_resurrect_5.txt"
+ln -s tmux_resurrect_5.txt "$R/last"
+run
+check "unsafe name in last: made safe" "x__ cd_ touch MARK_ _" "$(cut -f2 "$R/last")"
+check "...and last is still a link to that save" tmux_resurrect_5.txt "$(readlink "$R/last")"
+printf '%s\n' "$pane" > "$R/tmux_resurrect_6.txt"; ln -fs tmux_resurrect_6.txt "$R/last"
+touch -t 202001010000 "$R/tmux_resurrect_6.txt"; : > "$D/ref"
+run
+check "safe names: the save isn't rewritten" yes "$([[ $R/tmux_resurrect_6.txt -ot $D/ref ]] && echo yes)"
+
+# The saves hold each pane's command line and screen, a password or token included: only you can
+# read them (the security review's finding 3), old ones too.
+perm() { stat -c %a "$1" 2> /dev/null || stat -f %Lp "$1"; }
+rm -rf "$R"; (umask 022 && save "$R" 1 && save "$R" 2 && : > "$R/pane_contents.tar.gz"); chmod 755 "$R"
+ln -s tmux_resurrect_2.txt "$R/last"
+HOME="$D/home" XDG_DATA_HOME="" PATH="$D/bin:$PATH" bash "$here/../scripts/post-save.sh"
+check "post-save: the folder is yours only" 700 "$(perm "$R")"
+check "post-save: the saves are yours only" "600 600" "$(perm "$R/tmux_resurrect_1.txt") $(perm "$R/tmux_resurrect_2.txt")"
+check "post-save: the screens are yours only" 600 "$(perm "$R/pane_contents.tar.gz")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

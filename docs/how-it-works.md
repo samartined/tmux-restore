@@ -110,6 +110,24 @@ save made once the server is gone. A save of a live server that reads no panes (
 resurrect's tabs into `_`) is caught earlier: the save hook makes it a copy of `last`, so resurrect
 deletes it, and puts the old scrollback back for the archive resurrect rebuilds next.
 
+## Nothing in a save runs as code
+
+A save holds what tmux and the agents' files say, and some of it ends up in a command:
+- **Session and window names.** resurrect shows a pane's saved contents by running
+  `cat '<folder>/pane-<session>:<window>.<pane>'; exec <shell>` through the shell, with the session
+  name inside the quotes as it is. [`scripts/safe-names.sh`](../scripts/safe-names.sh) replaces
+  `'` `"` `` ` `` `$` `\` `;` `&` `|` `<` `>` `(` `)` in session and window names with `_`: the save
+  hook on every save, and [`scripts/pre-restore.sh`](../scripts/pre-restore.sh) on the save `last`
+  points at, for saves made before.
+- **Conversation ids.** An adapter reads the id from the agent's files and puts it into the command
+  typed at restore. Claude Code's and Gemini CLI's must be UUIDs, opencode's `ses_` and letters,
+  digits, `_` or `-`; anything else counts as no conversation. The resume commands quote the id
+  too.
+
+And only you can read the saves, which hold every pane's command line and screen:
+[`scripts/private-saves.sh`](../scripts/private-saves.sh) makes the folder 700 as the plugin
+loads, before the first save, and the saves and `pane_contents.tar.gz` 600 after every save.
+
 ## A save while the system shuts down
 
 At shutdown systemd stops units in parallel: the scopes your panes run in, and `tmux.service`
@@ -243,7 +261,10 @@ three seconds after the server did, tmux-restore runs it, under continuum's othe
 | [`scripts/save-hook.sh`](../scripts/save-hook.sh) | rewrites saved commands |
 | [`scripts/type-commands.sh`](../scripts/type-commands.sh) | after a restore, types each saved command once its shell is ready |
 | [`scripts/shell-hook.sh`](../scripts/shell-hook.sh) | tells tmux which Python venv each pane has active |
-| [`scripts/lib.sh`](../scripts/lib.sh) | process inspection (`/proc`, or `ps`/`lsof`) and flag filtering |
+| [`scripts/lib.sh`](../scripts/lib.sh) | process inspection (`/proc`, or `ps`/`lsof`), flag filtering and id checks |
+| [`scripts/safe-names.sh`](../scripts/safe-names.sh) | makes session and window names in a save safe for the shell |
+| [`scripts/private-saves.sh`](../scripts/private-saves.sh) | keeps the saves readable by you only |
+| [`scripts/saves-dir.sh`](../scripts/saves-dir.sh) | finds tmux-resurrect's save folder |
 | [`agents/*.sh`](../agents) | one adapter per agent |
 | [`scripts/shutdown-save.sh`](../scripts/shutdown-save.sh) | the save at shutdown (Linux) |
 | [`scripts/stop-save.sh`](../scripts/stop-save.sh) | `tmux.service`'s save as it stops: only when you stop it yourself (Linux) |

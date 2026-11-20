@@ -178,4 +178,24 @@ check "empty title: folder in its place" ":/srv/app" "$dir"
 check "empty title: command name in its place" "claude" "$cmd"
 check "empty title: command from the wrong pid dropped" ":" "$full"
 check "empty title: 11 fields" 11 "$(awk -F'\t' '{print NF}' "$D/save")"
+# Session and window names lose the characters a shell treats specially (the security review's
+# finding 1): resurrect runs `cat '<folder>/pane-<session>:<window>.<pane>'` through sh to show a
+# pane's saved contents, and a quote in the name ran what followed at restore.
+evil="x'; cd; touch MARK; '"
+printf '%s\n' "pane	$evil	0	1	:*	0	title	:/tmp	1	zsh	:" \
+	"window	$evil	0	:w\$(id)\`x\`	1	:*	layout	:" \
+	"state	$evil	a\"b|c&d<e>f\\g" \
+	"grouped_session	g(1)	$evil	:1	:0" \
+	"pane	mi sesión-2_b	1	1	:*	0	title	:/tmp	1	zsh	:" > "$D/save"
+main "$D/save"
+check "unsafe names: pane's session" "x__ cd_ touch MARK_ _" "$(sed -n 1p "$D/save" | cut -f2)"
+check "unsafe names: window's session and name" "x__ cd_ touch MARK_ _|:w__id__x_" "$(sed -n 2p "$D/save" | cut -f2,4 | tr '\t' '|')"
+check "unsafe names: state's sessions" "x__ cd_ touch MARK_ _|a_b_c_d_e_f_g" "$(sed -n 3p "$D/save" | cut -f2,3 | tr '\t' '|')"
+check "unsafe names: grouped session and its original" "g_1_|x__ cd_ touch MARK_ _" "$(sed -n 4p "$D/save" | cut -f2,3 | tr '\t' '|')"
+check "unsafe names: same fields" "11 8 3 5 11" "$(awk -F'\t' '{print NF}' "$D/save" | tr '\n' ' ' | sed 's/ $//')"
+check "unsafe names: a plain name, spaces and accents included, unchanged" "mi sesión-2_b" "$(sed -n 5p "$D/save" | cut -f2)"
+# The save it writes is yours only (the security review's finding 3)
+umask 022; printf 'pane\tmain\t0\t1\t:*\t0\tt\t:/tmp\t1\tzsh\t:make deploy\n' > "$D/save"; chmod 644 "$D/save"
+main "$D/save"
+check "the save it writes is yours only" 600 "$(stat -c %a "$D/save" 2> /dev/null || stat -f %Lp "$D/save")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))
