@@ -194,4 +194,8 @@ check "unsafe names: state's sessions" "x__ cd_ touch MARK_ _|a_b_c_d_e_f_g" "$(
 check "unsafe names: grouped session and its original" "g_1_|x__ cd_ touch MARK_ _" "$(sed -n 4p "$D/save" | cut -f2,3 | tr '\t' '|')"
 check "unsafe names: same fields" "11 8 3 5 11" "$(awk -F'\t' '{print NF}' "$D/save" | tr '\n' ' ' | sed 's/ $//')"
 check "unsafe names: a plain name, spaces and accents included, unchanged" "mi sesión-2_b" "$(sed -n 5p "$D/save" | cut -f2)"
+# The save it writes is yours only (the security review's finding 3)
+umask 022; printf 'pane\tmain\t0\t1\t:*\t0\tt\t:/tmp\t1\tzsh\t:make deploy\n' > "$D/save"; chmod 644 "$D/save"
+main "$D/save"
+check "the save it writes is yours only" 600 "$(stat -c %a "$D/save" 2> /dev/null || stat -f %Lp "$D/save")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

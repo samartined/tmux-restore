@@ -78,4 +78,14 @@ printf '%s\n' "$pane" > "$R/tmux_resurrect_6.txt"; ln -fs tmux_resurrect_6.txt "
 touch -t 202001010000 "$R/tmux_resurrect_6.txt"; : > "$D/ref"
 run
 check "safe names: the save isn't rewritten" yes "$([[ $R/tmux_resurrect_6.txt -ot $D/ref ]] && echo yes)"
+
+# The saves hold each pane's command line and screen, a password or token included: only you can
+# read them (the security review's finding 3), old ones too.
+perm() { stat -c %a "$1" 2> /dev/null || stat -f %Lp "$1"; }
+rm -rf "$R"; (umask 022 && save "$R" 1 && save "$R" 2 && : > "$R/pane_contents.tar.gz"); chmod 755 "$R"
+ln -s tmux_resurrect_2.txt "$R/last"
+HOME="$D/home" XDG_DATA_HOME="" PATH="$D/bin:$PATH" bash "$here/../scripts/post-save.sh"
+check "post-save: the folder is yours only" 700 "$(perm "$R")"
+check "post-save: the saves are yours only" "600 600" "$(perm "$R/tmux_resurrect_1.txt") $(perm "$R/tmux_resurrect_2.txt")"
+check "post-save: the screens are yours only" 600 "$(perm "$R/pane_contents.tar.gz")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

@@ -11,6 +11,8 @@ main() {
 	# resurrect won't start a restore when `last` points at nothing, so its pre-restore hook can't
 	# mend it then (scripts/mend-last.sh).
 	"$CURRENT_DIR/scripts/mend-last.sh"
+	# Only you can read the saves, from the first one on (scripts/private-saves.sh)
+	"$CURRENT_DIR/scripts/private-saves.sh"
 
 	default @continuum-restore on        # restore when the tmux server starts
 	default @continuum-save-interval 1   # save every minute
