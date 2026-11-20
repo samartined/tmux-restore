@@ -53,7 +53,8 @@ fi
 The panes then come back without asking, and you type the passphrase once, in the first terminal
 you open outside tmux. Every pane, and every agent in it, can use the key from then on without
 restarting: a pane gets the agent's address (`SSH_AUTH_SOCK`), not the key, and all of them get
-the same agent, even when they start at once. Until then, `git` and `ssh` fail in the agents,
+the same agent, even when they start at once, as long as `~/.keychain` exists (keychain's first
+run makes it; without it, panes starting at once can start agents of their own). Until then, `git` and `ssh` fail in the agents,
 since there's no one to ask; `ssh-add` in any pane adds the key for all of them. Anything else
 your startup asks for (a GPG pinentry, a vault login) can skip the question the same way, when
 `$TMUX` is set.
