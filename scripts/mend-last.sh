@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# Makes sure tmux-resurrect's `last` points at a save with panes. Run by the pre-restore-all hook
-# (scripts/pre-restore.sh) and the post-save-all hook (scripts/post-save.sh). `last` goes bad two
-# ways:
+# Makes sure tmux-resurrect's `last` points at a save with panes. Run by tmux-restore.tmux as it
+# loads, before anything restores, by the pre-restore-all hook (scripts/pre-restore.sh) and by the
+# post-save-all hook (scripts/post-save.sh). `last` goes bad two ways:
 #   - a save made after the server went away (at shutdown) finds no panes, and resurrect still
 #     makes it `last`: a restore would bring back nothing;
-#   - two saves in the same second (the timer and continuum, say) write the same file: one makes
-#     it `last`, the other finds it unchanged and deletes it, and `last` points at nothing; a
-#     restore then doesn't even start.
+#   - two saves in the same second (the timer and continuum, say, or two at shutdown) write the
+#     same file: one makes it `last`, the other finds it unchanged and deletes it, and `last`
+#     points at nothing; a restore then doesn't even start, so the pre-restore hook never runs.
 # Either way, point `last` at the newest save that has panes.
 # The save folder, worked out as tmux-resurrect does (scripts/helpers.sh, resurrect_dir).
 dir=$(tmux show-option -gqv @resurrect-dir)

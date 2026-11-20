@@ -32,6 +32,7 @@ END="# <<< tmux-restore <<<"
 COMMENTED="#tmux-restore# "
 UNIT=tmux-restore.service
 SAVE_UNIT=tmux-restore-save # .service + .timer: saves every few minutes, attached or not
+STOP_DROPIN=tmux.service.d/tmux-restore-stop.conf # continuum's tmux.service saves through scripts/stop-save.sh
 LABEL=io.github.andrewboldi.tmux-restore
 SAVE_LABEL=$LABEL.save
 # Exists if this installer turned on lingering, so that --uninstall turns it off again.
@@ -435,6 +436,14 @@ install_service() {
 		-e "s|^Environment=PATH=.*|Environment=PATH=$path|" \
 		"$PLUGINS/tmux-restore/systemd/$SAVE_UNIT.service" > "$dir/$SAVE_UNIT.service"
 	cat "$PLUGINS/tmux-restore/systemd/$SAVE_UNIT.timer" > "$dir/$SAVE_UNIT.timer"
+	# continuum's tmux.service (@continuum-boot) saves again as it stops. At shutdown that save can
+	# delete the one above and leave nothing to restore, so it goes through scripts/stop-save.sh,
+	# which saves only when the unit is stopped by hand. Not for a tmux.service of your own.
+	if ! [ -e "$dir/tmux.service" ] || grep -q '^Description=tmux default session (detached)$' "$dir/tmux.service"; then
+		mkdir -p "$dir/tmux.service.d"
+		printf '[Service]\nExecStop=\nExecStop=-"%s" "%s"\nExecStop="%s" kill-server\n' \
+			"$PLUGINS/tmux-restore/scripts/stop-save.sh" "$(command -v tmux)" "$(command -v tmux)" > "$dir/$STOP_DROPIN"
+	fi
 	systemctl --user daemon-reload
 	systemctl --user enable -q "$UNIT"
 	systemctl --user restart "$UNIT"
@@ -490,6 +499,12 @@ uninstall() {
 		rm -f "$dir/$UNIT"
 		user_systemd && systemctl --user daemon-reload || true
 		say "Removed $UNIT"
+	fi
+	if [ -e "$dir/$STOP_DROPIN" ]; then
+		rm -f "$dir/$STOP_DROPIN"
+		rmdir "$dir/tmux.service.d" 2> /dev/null || true
+		user_systemd && systemctl --user daemon-reload || true
+		say "tmux.service saves as it stops the way tmux-continuum set it up again"
 	fi
 	disable_boot
 	disable_linger
