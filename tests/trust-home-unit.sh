@@ -54,7 +54,13 @@ p=$(prompt "$H"); printf '%s\n' "${p/ This is your home folder,/ This is your$'\
 prompt "$H" > "$D/screen%8"                                  # claude --continue: left alone
 prompt "$H" > "$D/screen%6"                                  # the prompt, but working elsewhere
 : > "$D/keys"
-HOME=$H XDG_STATE_HOME=$D/state TMUX_RESTORE_TRUST_SECS=2 PATH="$D/bin:$PATH" bash "$here/../scripts/trust-home.sh"
+# Time enough for a slow machine to go through every pane (macOS took more than 2 seconds), and
+# stopped once the four panes it acts on are logged and a second more has passed
+HOME=$H XDG_STATE_HOME=$D/state TMUX_RESTORE_TRUST_SECS=60 PATH="$D/bin:$PATH" bash "$here/../scripts/trust-home.sh" &
+watcher=$!
+for _ in $(seq 300); do (($(cat "$D/state/tmux-restore/trust.log" 2> /dev/null | wc -l) >= 4)) && break; sleep 0.1; done
+sleep 1
+kill $watcher 2> /dev/null; wait $watcher 2> /dev/null
 check "home folder prompt: answered Yes" "%1 Down"$'\n'"%1 Enter" "$(grep '^%1 ' "$D/keys")"
 check "another folder's prompt: left alone" "" "$(grep '^%2 ' "$D/keys")"
 check "another kind of prompt: left alone" "" "$(grep '^%3 ' "$D/keys")"

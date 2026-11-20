@@ -23,7 +23,7 @@ check "no args"              ""                                             "$(k
 quoted=$(ka --append-system-prompt "be terse; it's \$fine" --effort max "a prompt"); eval "set -- $quoted"
 check "roundtrip argc" "4" "$#"; check "roundtrip value" "be terse; it's \$fine" "$2"
 pid=$(for p in $(pgrep -x claude); do [[ -e ~/.claude/sessions/$p.json ]] && { echo "$p"; break; }; done)
-[[ -n $pid ]] && check "proc_start vs registry" "$(jq -r .procStart ~/.claude/sessions/"$pid".json)" "$(proc_start "$pid")"
+[[ -n $pid ]] && check "proc_start vs registry" "$(jq -r .procStart ~/.claude/sessions/"$pid".json | tr -s ' ')" "$(proc_start "$pid")"
 for cmd in 'sleep 100000' "python3 -c import\\ time\;\\ time.sleep\\(1e6\\) it\\'s\\ a\\ test" "echo \$'a\\nb' \"double\" 'single'" 'grep -r foo\ bar . | wc -l'; do
 	check "prefill: $cmd" "$cmd" "$(zsh -fc "$(prefill "$cmd"); read -rz got; print -rn -- \$got")"
 done

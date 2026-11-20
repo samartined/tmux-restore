@@ -40,8 +40,11 @@ claude_registered() {
 	read -r sid start < <(jq -r 'select(.kind == "interactive") | "\(.sessionId) \(.procStart)"' \
 		"$(claude_dir)/sessions/$1.json" 2> /dev/null)
 	is_uuid "$sid" || return 1
-	# The start time is a Linux clock-tick count; without /proc, trust the pid.
-	[[ -z $HAVE_PROCFS || $start == "$(proc_start "$1")" ]] || return 1
+	# The process that wrote it, not an earlier one with the same pid (after a reboot, say): its
+	# start time is a clock-tick count on Linux, a date on macOS (compared with single spaces).
+	local -a words
+	read -ra words <<< "$start"
+	[[ -n $start && "${words[*]}" == "$(proc_start "$1")" ]] || return 1
 	printf '%s\n' "$sid"
 }
 
