@@ -279,6 +279,8 @@ main() {
 		out[i]="${heads[i]}"$'\t'":$cmd"
 	done
 	((${#out[@]})) && printf '%s\n' "${out[@]}" > "$save_file.tmp" && mv -f "$save_file.tmp" "$save_file"
+	# No session or window name a shell would read as code (scripts/safe-names.sh says why)
+	"$ROOT/scripts/safe-names.sh" "$save_file"
 	run_next_hook "$save_file"
 }
 
