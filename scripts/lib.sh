@@ -7,6 +7,12 @@
 PROC=${TMUX_RESTORE_PROC:-/proc}
 if [[ -n ${TMUX_RESTORE_PROC:-} || -r /proc/self/cmdline ]]; then HAVE_PROCFS=1; else HAVE_PROCFS=""; fi
 
+# is_uuid ID: ID is a UUID, the form Claude Code and Gemini CLI give their conversations' ids.
+# An id read from an agent's files goes into a command that runs at restore, so an adapter takes
+# nothing else (the security review's finding 2).
+UUID_RE='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+is_uuid() { [[ $1 =~ $UUID_RE ]]; }
+
 # proc_argv PID: set the array ARGV to the command line of process PID.
 # (Without /proc only an approximation: ps joins the arguments with spaces.)
 proc_argv() {

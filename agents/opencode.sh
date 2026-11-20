@@ -29,6 +29,11 @@ opencode_ui() {
 	return 0
 }
 
+# opencode_id ID: ID has the form of an opencode session id. It goes into a command that runs at
+# restore, so nothing else is taken (the security review's finding 2).
+opencode_id_re='^ses_[A-Za-z0-9_-]+$'
+opencode_id() { [[ $1 =~ $opencode_id_re ]]; }
+
 opencode_db() {
 	local data db
 	data=$(proc_env "$1" XDG_DATA_HOME)
@@ -51,18 +56,18 @@ opencode_session() {
 		for table in session_v2 session; do
 			id=$(sqlite3 -readonly -cmd ".timeout 2000" "$db" \
 				"SELECT id FROM $table WHERE parent_id IS NULL AND directory = '$dir' AND time_updated >= $((since * 1000)) ORDER BY time_updated DESC LIMIT 1;" 2> /dev/null)
-			[[ $id == ses_* ]] && break
+			opencode_id "$id" && break
 		done
 	fi
-	if [[ $id != ses_* ]] && proc_args "$1"; then
+	if ! opencode_id "$id" && proc_args "$1"; then
 		id=$(flag_value "-s --session" "${ARGV[@]}")
 	fi
-	[[ $id == ses_* ]] && printf '%s\n' "$id"
+	opencode_id "$id" && printf '%s\n' "$id"
 }
 
 opencode_resume() {
-	proc_args "$1" || return 1
-	printf 'opencode%s -s %s%s' "$(opencode_ui)" "$2" "$(keep_flags opencode "${ARGV[@]}")"
+	opencode_id "$2" && proc_args "$1" || return 1
+	printf 'opencode%s -s %q%s' "$(opencode_ui)" "$2" "$(keep_flags opencode "${ARGV[@]}")"
 }
 
 opencode_continue() {

@@ -39,7 +39,7 @@ claude_registered() {
 	local sid start
 	read -r sid start < <(jq -r 'select(.kind == "interactive") | "\(.sessionId) \(.procStart)"' \
 		"$(claude_dir)/sessions/$1.json" 2> /dev/null)
-	[[ -n $sid && $sid != null ]] || return 1
+	is_uuid "$sid" || return 1
 	# The start time is a Linux clock-tick count; without /proc, trust the pid.
 	[[ -z $HAVE_PROCFS || $start == "$(proc_start "$1")" ]] || return 1
 	printf '%s\n' "$sid"
@@ -53,14 +53,13 @@ claude_session() {
 	# open already.
 	proc_args "$1" || return 1
 	local i arg id="" f pid
-	local uuid='^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
 	for ((i = 0; i < ${#ARGV[@]}; i++)); do
 		arg=${ARGV[i]}
 		case $arg in
 		--) break ;;
 		--fork-session) return 1 ;; # it would have become a new conversation
-		-r | --resume | --session-id) [[ ${ARGV[i + 1]:-} =~ $uuid ]] && id=${ARGV[i + 1]} ;;
-		--resume=* | --session-id=*) [[ ${arg#*=} =~ $uuid ]] && id=${arg#*=} ;;
+		-r | --resume | --session-id) is_uuid "${ARGV[i + 1]:-}" && id=${ARGV[i + 1]} ;;
+		--resume=* | --session-id=*) is_uuid "${arg#*=}" && id=${arg#*=} ;;
 		esac
 	done
 	[[ -n $id ]] || return 1
@@ -74,6 +73,7 @@ claude_session() {
 
 claude_resume() {
 	local pid=$1 id=$2 flag=--resume
+	is_uuid "$id" || return 1
 	# Before anything is typed there's no transcript to resume: start a session with that id.
 	compgen -G "$(claude_dir)/projects/*/$id.jsonl" > /dev/null || flag=--session-id
 	proc_args "$pid" || return 1
@@ -85,7 +85,7 @@ claude_resume() {
 	if [[ -n $name && "$kept " != *" -n "* && "$kept " != *" --name "* && $kept != *" --name="* ]]; then
 		kept+=" --name $(printf '%q' "$name")"
 	fi
-	printf 'claude %s %s%s' "$flag" "$id" "$kept"
+	printf 'claude %s %q%s' "$flag" "$id" "$kept"
 }
 
 # Only for a Claude Code too old to register its sessions. One that registers them and has no

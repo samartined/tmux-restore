@@ -51,16 +51,18 @@ gemini_session() {
 			best_start=$start
 		done
 	fi
-	if [[ -n $best ]]; then
-		head -1 "$best" | jq -r '.sessionId // empty'
-	elif proc_args "$1"; then
-		flag_value "-r --resume --session-id" "${ARGV[@]}" | grep -E '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+	local id=""
+	[[ -n $best ]] && id=$(head -1 "$best" | jq -r '.sessionId // empty' 2> /dev/null)
+	# Otherwise the one it was started with (--resume also takes "latest" or a number: not that)
+	if ! is_uuid "$id" && proc_args "$1"; then
+		id=$(flag_value "-r --resume --session-id" "${ARGV[@]}")
 	fi
+	is_uuid "$id" && printf '%s\n' "$id"
 }
 
 gemini_resume() {
-	proc_args "$1" || return 1
-	printf 'gemini --resume %s%s' "$2" "$(keep_flags gemini "${ARGV[@]}")"
+	is_uuid "$2" && proc_args "$1" || return 1
+	printf 'gemini --resume %q%s' "$2" "$(keep_flags gemini "${ARGV[@]}")"
 }
 
 # Nothing typed yet: start a fresh session with the same flags.

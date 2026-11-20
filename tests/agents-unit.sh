@@ -72,23 +72,27 @@ claude_registry() { # PID SESSION START [no-transcript] [name=NAME]
 	printf '{"pid":%s,"sessionId":"%s","procStart":"%s","kind":"interactive"%s}\n' "$1" "$2" "$3" "$field" > "$CLAUDE_CONFIG_DIR/sessions/$1.json"
 	[[ $opts == *" no-transcript "* ]] || : > "$CLAUDE_CONFIG_DIR/projects/-w/$2.jsonl"
 }
+# Conversation ids are UUIDs (anything else is refused: the security review's finding 2)
+S1=5e55a0e0-0000-4000-8000-000000000001 S2=5e55a0e0-0000-4000-8000-000000000002 S3=5e55a0e0-0000-4000-8000-000000000003
+S4=5e55a0e0-0000-4000-8000-000000000004 S5=5e55a0e0-0000-4000-8000-000000000005 S6=5e55a0e0-0000-4000-8000-000000000006
+S8=5e55a0e0-0000-4000-8000-000000000008
 reset
-mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude --model opus 'fix the bug'; claude_registry 101 S1 5000
-mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --effort max; claude_registry 201 S2 5100 no-transcript
-mkproc 300 1 /w/c 10 /usr/bin/zsh; mkproc 301 300 /w/c 5200 claude -c --model opus; claude_registry 301 S3 9999   # stale entry
+mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude --model opus 'fix the bug'; claude_registry 101 $S1 5000
+mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --effort max; claude_registry 201 $S2 5100 no-transcript
+mkproc 300 1 /w/c 10 /usr/bin/zsh; mkproc 301 300 /w/c 5200 claude -c --model opus; claude_registry 301 $S3 9999   # stale entry
 mkproc 400 1 /w/d 10 /usr/bin/zsh; mkproc 401 400 /w/d 5300 claude --model opus                                 # not registered
 mkproc 500 1 /w/d 10 /usr/bin/zsh; mkproc 501 500 /w/d 5400 claude --model opus                                 # same dir as 401
-mkproc 600 1 /w/f 5500 claude; claude_registry 600 S6 5500                                                      # pane runs claude itself
+mkproc 600 1 /w/f 5500 claude; claude_registry 600 $S6 5500                                                      # pane runs claude itself
 mkproc 700 1 /w/g 10 /usr/bin/zsh; mkproc 701 700 /w/g 5600 vim notes.txt
 pane 0 100 "claude --model opus fix the bug"; pane 1 200 "claude --effort max"; pane 2 300 "claude -c --model opus"
 pane 3 400 "claude --model opus"; pane 4 500 "claude --model opus"; pane 5 600 ""; pane 6 700 "vim notes.txt"
 run
-check "claude: exact id, prompt dropped"       "TMUX_RESTORE=1 claude --resume S1 --model opus"    "${GOT[0]}"
-check "claude: nothing typed yet"              "TMUX_RESTORE=1 claude --session-id S2 --effort max" "${GOT[1]}"
+check "claude: exact id, prompt dropped"       "TMUX_RESTORE=1 claude --resume $S1 --model opus"    "${GOT[0]}"
+check "claude: nothing typed yet"              "TMUX_RESTORE=1 claude --session-id $S2 --effort max" "${GOT[1]}"
 check "claude: stale entry, no conversation -> typed" "TMUX_RESTORE=1 print -rz -- 'claude -c --model opus'" "${GOT[2]}"
 check "claude: same-dir fallbacks -> typed 1"  "TMUX_RESTORE=1 print -rz -- 'claude --model opus'" "${GOT[3]}"
 check "claude: same-dir fallbacks -> typed 2"  "TMUX_RESTORE=1 print -rz -- 'claude --model opus'" "${GOT[4]}"
-check "claude: pane process is the agent"      "TMUX_RESTORE=1 claude --resume S6"                 "${GOT[5]}"
+check "claude: pane process is the agent"      "TMUX_RESTORE=1 claude --resume $S6"                 "${GOT[5]}"
 check "not an agent: safe program unchanged"   "vim notes.txt"                                     "${GOT[6]}"
 SHELL_PATH=/bin/bash run
 check "bash: same-dir fallbacks unchanged"     "claude --model opus"                               "${GOT[3]}"
@@ -103,7 +107,7 @@ mkproc 400 1 /w/d 10 /usr/bin/zsh; mkproc 401 400 /w/d 5300 claude --resume $U3 
 mkproc 500 1 /w/e 10 /usr/bin/zsh; mkproc 501 500 /w/e 5400 claude --resume quiz                            # a search, not an id
 mkproc 600 1 /w/f 10 /usr/bin/zsh; mkproc 601 600 /w/f 5500 claude --continue
 mkproc 700 1 /w/g 10 /usr/bin/zsh; mkproc 701 700 /w/g 5600 claude --session-id=$U3
-mkproc 800 1 /w/h 10 /usr/bin/zsh; mkproc 801 800 /w/h 5700 claude --resume $U1 --model opus; claude_registry 801 S8 1   # stale entry
+mkproc 800 1 /w/h 10 /usr/bin/zsh; mkproc 801 800 /w/h 5700 claude --resume $U1 --model opus; claude_registry 801 $S8 1   # stale entry
 : > "$CLAUDE_CONFIG_DIR/projects/-w/$U1.jsonl"
 pane 0 100 "claude --resume $U1 --name quiz --remote-control"; pane 1 200 "claude --resume $U2 --name dup"
 pane 2 300 "claude --name live"; pane 3 400 "claude --resume $U3 --fork-session"; pane 4 500 "claude --resume quiz"
@@ -125,31 +129,31 @@ run
 check "claude without a registry: --continue" "TMUX_RESTORE=1 claude --continue --model opus" "${GOT[0]}"
 
 reset # one conversation open in two panes: an exact adapter restores both
-mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude; claude_registry 101 S1 5000
-mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --resume S1; claude_registry 201 S1 5100
-pane 0 100 "claude"; pane 1 200 "claude --resume S1"
+mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude; claude_registry 101 $S1 5000
+mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --resume $S1; claude_registry 201 $S1 5100
+pane 0 100 "claude"; pane 1 200 "claude --resume $S1"
 run
-check "claude: one conversation in two panes (1)" "TMUX_RESTORE=1 claude --resume S1"                "${GOT[0]}"
-check "claude: one conversation in two panes (2)" "TMUX_RESTORE=1 claude --resume S1"                "${GOT[1]}"
+check "claude: one conversation in two panes (1)" "TMUX_RESTORE=1 claude --resume $S1"                "${GOT[0]}"
+check "claude: one conversation in two panes (2)" "TMUX_RESTORE=1 claude --resume $S1"                "${GOT[1]}"
 
 reset # the session's name (how other sessions address it) comes back too
-mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude --model opus; claude_registry 101 S1 5000 name=compapp-db
-mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --name mine; claude_registry 201 S2 5100 name=mine
-mkproc 300 1 /w/c 10 /usr/bin/zsh; mkproc 301 300 /w/c 5200 claude; claude_registry 301 S3 5200 name=two_words
-mkproc 400 1 /w/d 10 /usr/bin/zsh; mkproc 401 400 /w/d 5300 claude -n mine; claude_registry 401 S4 5300 name=mine
+mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude --model opus; claude_registry 101 $S1 5000 name=compapp-db
+mkproc 200 1 /w/b 10 /usr/bin/zsh; mkproc 201 200 /w/b 5100 claude --name mine; claude_registry 201 $S2 5100 name=mine
+mkproc 300 1 /w/c 10 /usr/bin/zsh; mkproc 301 300 /w/c 5200 claude; claude_registry 301 $S3 5200 name=two_words
+mkproc 400 1 /w/d 10 /usr/bin/zsh; mkproc 401 400 /w/d 5300 claude -n mine; claude_registry 401 $S4 5300 name=mine
 pane 0 100 "claude --model opus"; pane 1 200 "claude --name mine"; pane 2 300 "claude"; pane 3 400 "claude -n mine"
 run
-check "claude: name kept"                       "TMUX_RESTORE=1 claude --resume S1 --model opus --name compapp-db" "${GOT[0]}"
-check "claude: --name isn't added twice"        "TMUX_RESTORE=1 claude --resume S2 --name mine"                  "${GOT[1]}"
-check "claude: a name with a space, quoted"     "TMUX_RESTORE=1 claude --resume S3 --name two\\ words"            "${GOT[2]}"
-check "claude: -n isn't added twice"            "TMUX_RESTORE=1 claude --resume S4 -n mine"                      "${GOT[3]}"
+check "claude: name kept"                       "TMUX_RESTORE=1 claude --resume $S1 --model opus --name compapp-db" "${GOT[0]}"
+check "claude: --name isn't added twice"        "TMUX_RESTORE=1 claude --resume $S2 --name mine"                  "${GOT[1]}"
+check "claude: a name with a space, quoted"     "TMUX_RESTORE=1 claude --resume $S3 --name two\\ words"            "${GOT[2]}"
+check "claude: -n isn't added twice"            "TMUX_RESTORE=1 claude --resume $S4 -n mine"                      "${GOT[3]}"
 
 reset # subcommands aren't conversations: Remote Control starts again as it was, the rest are saved as they are
 mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude rc --name 'my box'
 mkproc 200 1 /w/a 10 /usr/bin/zsh; mkproc 201 200 /w/a 5100 claude remote-control
 mkproc 300 1 /w/c 10 /usr/bin/zsh; mkproc 301 300 /w/c 5200 claude mcp serve
 mkproc 400 1 /w/d 10 /usr/bin/zsh; mkproc 401 400 /w/d 5300 claude purge /w/d
-mkproc 500 1 /w/e 10 /usr/bin/zsh; mkproc 501 500 /w/e 5400 claude --debug mcp; claude_registry 501 S5 5400
+mkproc 500 1 /w/e 10 /usr/bin/zsh; mkproc 501 500 /w/e 5400 claude --debug mcp; claude_registry 501 $S5 5400
 pane 0 100 "claude rc --name my\\ box"; pane 1 200 "claude remote-control"; pane 2 300 "claude mcp serve"
 pane 3 400 "claude purge /w/d"; pane 4 500 "claude --debug mcp"
 run
@@ -157,7 +161,7 @@ check "claude: Remote Control starts again"      "TMUX_RESTORE=1 claude rc --nam
 check "claude: two in one directory, no clash"   "TMUX_RESTORE=1 claude remote-control"              "${GOT[1]}"
 check "claude: another subcommand is typed"      "TMUX_RESTORE=1 print -rz -- 'claude mcp serve'"    "${GOT[2]}"
 check "claude: purge isn't run again"            "TMUX_RESTORE=1 print -rz -- 'claude purge /w/d'"   "${GOT[3]}"
-check "claude: a flag's value isn't a subcommand" "TMUX_RESTORE=1 claude --resume S5 --debug mcp"    "${GOT[4]}"
+check "claude: a flag's value isn't a subcommand" "TMUX_RESTORE=1 claude --resume $S5 --debug mcp"    "${GOT[4]}"
 SHELL_PATH=/bin/bash run
 check "bash: Remote Control starts again"        "TMUX_RESTORE=1 claude rc --name my\\ box"           "${GOT[0]}"
 check "bash: another subcommand unchanged"       "claude mcp serve"                                  "${GOT[2]}"
@@ -315,10 +319,10 @@ reset
 mkproc 100 1 /w/a 10 /usr/bin/zsh
 mkproc 101 100 /w/a 5000 /usr/local/bin/ai-memory run claude --model opus
 mkproc 102 101 /w/a 5000 claude --model opus
-claude_registry 102 S1 5000
+claude_registry 102 $S1 5000
 pane 0 100 "ai-memory run claude --model opus"
 run
-check "ai-memory: claude child resumes"          "TMUX_RESTORE=1 ai-memory run claude --resume S1 --model opus" "${GOT[0]}"
+check "ai-memory: claude child resumes"          "TMUX_RESTORE=1 ai-memory run claude --resume $S1 --model opus" "${GOT[0]}"
 
 reset
 mkdir -p "$D/data/opencode"
@@ -344,7 +348,7 @@ reset
 V="$D/my proj's/.venv"
 mkdir -p "$V/bin" && : > "$V/bin/activate"
 A="TMUX_RESTORE=1 . '$D/my proj'\\''s/.venv/bin/activate' 2> /dev/null"
-mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude; claude_registry 101 S1 5000
+mkproc 100 1 /w/a 10 /usr/bin/zsh; mkproc 101 100 /w/a 5000 claude; claude_registry 101 $S1 5000
 mkproc 200 1 /w/d 10 /usr/bin/zsh; mkproc 201 200 /w/d 5300 claude --model opus # not registered
 mkproc 300 1 /w/d 10 /usr/bin/zsh; mkproc 301 300 /w/d 5400 claude --model opus # same dir as 201
 mkproc 400 1 /w/g 10 /usr/bin/zsh; mkproc 401 400 /w/g 5600 vim notes.txt
@@ -354,7 +358,7 @@ pane 0 100 "claude"; pane 1 200 "claude --model opus"; pane 2 300 "claude --mode
 pane 3 400 "vim notes.txt"; pane 4 500 ""; pane 5 600 ""
 venv 0 "$V"; venv 1 "$V"; venv 3 "$V"; venv 4 "$V"; venv 5 "$D/deleted/.venv"
 run
-check "venv: before the agent"                 "$A; claude --resume S1"                            "${GOT[0]}"
+check "venv: before the agent"                 "$A; claude --resume $S1"                            "${GOT[0]}"
 check "venv: before a same-dir fallback"       "$A; print -rz -- 'claude --model opus'"            "${GOT[1]}"
 check "venv: only in its own pane"             "TMUX_RESTORE=1 print -rz -- 'claude --model opus'" "${GOT[2]}"
 check "venv: safe program left to resurrect"   "vim notes.txt"                                     "${GOT[3]}"
@@ -379,5 +383,35 @@ pane 0 100 "node /opt/fake/bin/fakeagent.js --model big a prompt"
 NEXT_HOOK="$D/next-hook.sh" run
 check "own adapter (node script, flags kept)"  "TMUX_RESTORE=1 fakeagent --open F1 --model big"    "${GOT[0]}"
 check "hook you had runs after, with the file" "$D/save"                                           "$(cat "$D/next.log" 2>/dev/null)"
+
+# --- An id that isn't one (the security review's finding 2) -----------------------------------
+# The id read from an agent's files goes into the command typed at restore. Anything but the
+# agent's own id format is refused, and the pane comes back as it would with no conversation.
+reset
+bad="x;touch\${IFS}$D/PWNED;y" # no space: it would split it
+G=$D/ghome2/.gemini; mkdir -p "$G/tmp/w-x/chats"
+printf '{"projects":{"/w/x":"w-x"}}\n' > "$G/projects.json"
+gsession "$G/tmp/w-x/chats/session-2023-11-14T22-14-xxxxxxxx.jsonl" "$bad" 2023-11-14T22:14:12.000Z typed
+E="GEMINI_CLI_HOME=$D/ghome2"; gemini_pane 100 /w/x -m pro
+mkdir -p "$D/data/opencode"
+sqlite3 "$D/data/opencode/opencode.db" "CREATE TABLE session (id TEXT, parent_id TEXT, directory TEXT, time_updated INTEGER);
+	INSERT INTO session VALUES ('ses_$bad', NULL, '/w/o', 1700000300000);"
+mkproc 200 1 /w/o 10 /usr/bin/zsh; ENVIRON="XDG_DATA_HOME=$D/data" mkproc 201 200 /w/o 5000 opencode --model anthropic/x
+mkproc 300 1 /w/p 10 /usr/bin/zsh; ENVIRON="XDG_DATA_HOME=$D/data" mkproc 301 300 /w/p 5000 opencode -s "ses_2$bad"
+mkproc 400 1 /w/c 10 /usr/bin/zsh; mkproc 401 400 /w/c 5300 claude --model opus; claude_registry 401 "$bad" 5300 no-transcript
+mkproc 500 1 /w/d 10 /usr/bin/zsh; mkproc 501 500 /w/d 5400 claude; claude_registry 501 "$S5" 5400 "name=it's;_touch_y"
+pane 0 100 "node /opt/g/bin/gemini -m pro"; pane 1 200 "opencode --model anthropic/x"; pane 2 300 "opencode -s ses_2$bad"
+pane 3 400 "claude --model opus"; pane 4 500 "claude"
+run
+check "bad id: gemini starts fresh"               "TMUX_RESTORE=1 gemini -m pro"                         "${GOT[0]}"
+check "bad id: opencode continues instead"        "TMUX_RESTORE=1 opencode -c --model anthropic/x"       "${GOT[1]}"
+check "bad -s id: opencode continues instead"     "TMUX_RESTORE=1 opencode -c"                           "${GOT[2]}"
+check "bad id: claude comes back typed, not run"  "TMUX_RESTORE=1 print -rz -- 'claude --model opus'"    "${GOT[3]}"
+check "claude: a name from the registry is quoted" "TMUX_RESTORE=1 claude --resume $S5 --name $(printf '%q' "it's; touch y")" "${GOT[4]}"
+check "bad id: nowhere in the save" 0 "$(grep -c PWNED "$D/save")"
+load_agents
+check "gemini_resume refuses a bad id"   "" "$(gemini_resume 102 "$bad" 2> /dev/null)"
+check "opencode_resume refuses a bad id" "" "$(opencode_resume 201 "ses_$bad" 2> /dev/null)"
+check "claude_resume refuses a bad id"   "" "$(claude_resume 401 "$bad" 2> /dev/null)"
 
 echo "passed=$pass failed=$fail"; (( fail == 0 ))
