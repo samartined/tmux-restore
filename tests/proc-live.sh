@@ -8,6 +8,8 @@ here=$(cd "$(dirname "$0")" && pwd)
 source "$here/../scripts/lib.sh"
 # shellcheck source=agents/codex.sh
 source "$here/../agents/codex.sh"
+# shellcheck source=agents/claude.sh
+source "$here/../agents/claude.sh"
 D=$(mktemp -d)
 D=$(cd "$D" && pwd -P) # macOS: /var is a symlink, and lsof reports real paths
 pids=()
@@ -20,6 +22,8 @@ mkdir -p "$D/work dir" "$D/bin" "$D/sessions/2026/10/31"
 # The fake agent: a copy of sleep named codex. A multi-call coreutils (uutils) won't run under
 # another name, so there it's a script named codex, as when an agent starts from a shell wrapper.
 cp "$(command -v sleep)" "$D/bin/codex"
+# macOS kills a copy of a system program (SIGKILL) unless it's signed again
+[[ $(uname -s) == Darwin ]] && codesign -s - -f "$D/bin/codex" 2> /dev/null
 argv="$D/bin/codex"
 if ! "$D/bin/codex" 0 2> /dev/null; then
 	printf '#!/bin/sh\nwhile :; do sleep 1; done\n' > "$D/bin/codex"
@@ -49,6 +53,9 @@ check "procs_named" yes "$(yes_no grep -qx "$agent" <(procs_named codex))"
 check "proc_open_files" yes "$(yes_no grep -qxF "$rollout" <(proc_open_files "$agent"))"
 started=$(proc_start_epoch "$agent")
 check "proc_start_epoch" yes "$( ((started >= start - 2 && started <= $(date +%s) + 1)) && echo yes || echo "no ($started, started at $start)")"
+# macOS: ps writes the start time in the user's language ("jue. 19 nov."), and in their time zone
+started=$(LC_ALL=es_ES.UTF-8 TZ=Europe/Madrid proc_start_epoch "$agent")
+check "proc_start_epoch in another language and zone" yes "$( ((started >= start - 2 && started <= $(date +%s) + 1)) && echo yes || echo "no ($started, started at $start)")"
 if [[ -n $HAVE_PROCFS ]]; then
 	check "proc_env" "$HOME" "$(proc_env "$agent" HOME)"
 	[[ $argv == "$D/bin/codex" ]] && check "proc_exe" "$D/bin/codex" "$(proc_exe "$agent")"
@@ -58,6 +65,20 @@ check "codex_match" yes "$(yes_no codex_match "$agent")"
 check "codex_session" "$rollout" "$(codex_session "$agent")"
 check "codex_resume" "codex resume $u -C $(printf '%q' "$D/work dir")" "$(codex_resume "$agent" "$rollout")"
 check "alone_in_cwd: alone" yes "$(yes_no alone_in_cwd "$agent")"
+
+# Claude Code's registry, as if this process were a claude: the conversation counts only when the
+# registry has this process's start time (Claude Code's own format: on macOS, a date in UTC), not
+# an earlier process's with the same pid (after a reboot)
+mkdir -p "$D/claude/sessions"
+reg() { printf '{"kind":"interactive","sessionId":"%s","procStart":"%s"}\n' "$u" "$1" > "$D/claude/sessions/$agent.json"; }
+if [[ -n $HAVE_PROCFS ]]; then
+	reg "$(proc_start "$agent")"
+else
+	reg "$(LC_ALL=C TZ=UTC ps -o lstart= -p "$agent" | sed 's/ *$//')"
+fi
+check "claude_registered: this process" "$u" "$(CLAUDE_CONFIG_DIR=$D/claude claude_registered "$agent")"
+reg "Mon Jan  5 09:00:00 2026"
+check "claude_registered: an earlier process with this pid" "" "$(CLAUDE_CONFIG_DIR=$D/claude claude_registered "$agent")"
 fake_codex 301 &
 pids+=($!)
 sleep 1

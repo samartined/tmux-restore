@@ -121,7 +121,12 @@ proc_start() {
 		read -ra stat <<< "$stat"
 		printf '%s\n' "${stat[19]}"
 	else
-		ps -o lstart= -p "$1" 2>/dev/null
+		# Elsewhere (macOS), the date as Claude Code's registry has it: in English and UTC, with
+		# single spaces (ps writes it in the user's language and time zone, and pads it)
+		local -a words
+		read -ra words <<< "$(LC_ALL=C TZ=UTC ps -o lstart= -p "$1" 2> /dev/null)"
+		((${#words[@]})) || return 1
+		printf '%s\n' "${words[*]}"
 	fi
 }
 
@@ -134,9 +139,11 @@ proc_start_epoch() {
 		hz=$(getconf CLK_TCK 2> /dev/null || echo 100)
 		[[ -n ${btime:-} ]] && printf '%s\n' $((btime + ticks / hz))
 	else
+		# ps writes it in the user's language ("jue. 19 nov.") and time zone: read and parse it
+		# in English and UTC
 		local lstart
-		lstart=$(ps -o lstart= -p "$1" 2> /dev/null) || return 1
-		date -j -f '%a %b %d %T %Y' "$lstart" +%s 2> /dev/null
+		lstart=$(LC_ALL=C TZ=UTC ps -o lstart= -p "$1" 2> /dev/null) || return 1
+		LC_ALL=C TZ=UTC date -j -f '%a %b %d %T %Y' "$lstart" +%s 2> /dev/null
 	fi
 }
 

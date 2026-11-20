@@ -5,7 +5,7 @@ started with. The initial prompt is never sent again.
 
 | Agent | How tmux-restore finds the conversation | Restored as | Verified with |
 |---|---|---|---|
-| [Claude Code](https://claude.com/claude-code) | Claude Code's registry of running sessions (`~/.claude/sessions/<pid>.json`). Exact, and it follows `/clear`. | `claude --resume <id> <flags>` | 2.1.316 |
+| [Claude Code](https://claude.com/claude-code) | Claude Code's registry of running sessions (`~/.claude/sessions/<pid>.json`), when its start time is the process's (not an earlier one's with the same pid). Exact, and it follows `/clear`. | `claude --resume <id> <flags>` | 2.1.316 |
 | [Codex CLI](https://github.com/openai/codex) | The rollout file Codex keeps open (`~/.codex/sessions/…/rollout-…-<id>.jsonl`). Exact. | `codex resume <id> -C <dir> <flags>` | 0.134.0 |
 | [Gemini CLI](https://github.com/google-gemini/gemini-cli) | The newest session of the pane's project that started after the agent did and that you typed in. | `gemini --resume <id> <flags>` | 0.66.0 |
 | [opencode](https://opencode.ai) | The newest session in the agent's directory updated after it started. | `opencode -s <id> <flags>`, or `opencode mini -s <id> <flags>` | 1.18.32, 2.2.6 |
