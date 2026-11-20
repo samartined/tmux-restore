@@ -7,7 +7,7 @@
 # shellcheck source=scripts/saves-dir.sh
 . "$(dirname "$0")/saves-dir.sh"
 dir=$(saves_dir)
-mkdir -p -m 700 "$dir" 2> /dev/null
+[ -d "$dir" ] || { mkdir -p "$(dirname "$dir")" && mkdir -m 700 "$dir"; } 2> /dev/null # private from the start
 chmod 700 "$dir" 2> /dev/null
 for f in "$dir"/tmux_resurrect_*.txt "$dir"/pane_contents.tar.gz; do
 	[ -f "$f" ] && chmod 600 "$f" 2> /dev/null
