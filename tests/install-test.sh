@@ -139,6 +139,9 @@ if [[ $scenario == fresh ]]; then
 		ok "[fresh] tmux starts at boot (continuum's systemd unit)" "grep -q \"^set -g @continuum-boot 'on'$\" ~/.tmux.conf"
 		ok "[fresh] ...noted, so that --uninstall turns it off" "[[ -e ~/.local/state/tmux-restore/enabled-boot ]]"
 		ok "[fresh] ...with a UTF-8 locale when the user manager has none" "grep -q '^Environment=LANG=C.UTF-8$' ~/.config/systemd/user/tmux.service.d/tmux-restore-locale.conf"
+		check "[fresh] ...saving as it stops only when stopped by hand (scripts/stop-save.sh)" \
+			"$(printf '[Service]\nExecStop=\nExecStop=-"%s" "%s"\nExecStop="%s" kill-server' "$P/tmux-restore/scripts/stop-save.sh" "$(command -v tmux)" "$(command -v tmux)")" \
+			"$(cat ~/.config/systemd/user/tmux.service.d/tmux-restore-stop.conf 2> /dev/null)"
 		ok "[fresh] periodic save timer enabled and started" "grep -q '^--user enable -q --now tmux-restore-save.timer$' ~/systemctl.log"
 	else
 		ok "[fresh] flock installed (one restore at a time)" "command -v flock > /dev/null"
@@ -212,6 +215,7 @@ if [[ $scenario == fresh ]]; then
 		ok "[fresh] boot at startup turned off" "grep -q '^--user disable -q tmux.service$' ~/systemctl.log"
 		ok "[fresh] ...without stopping tmux" "! grep -q 'stop.*tmux.service' ~/systemctl.log"
 		ok "[fresh] ...and the note removed" "[[ ! -e ~/.local/state/tmux-restore/enabled-boot ]]"
+		ok "[fresh] ...and the stop drop-in removed" "[[ ! -e ~/.config/systemd/user/tmux.service.d/tmux-restore-stop.conf ]]"
 		ok "[fresh] ...and the locale drop-in removed" "[[ ! -e ~/.config/systemd/user/tmux.service.d ]]"
 	fi
 	ok "[fresh] periodic save units removed" "[[ ! -e ~/.config/systemd/user/tmux-restore-save.service && ! -e ~/.config/systemd/user/tmux-restore-save.timer ]]"

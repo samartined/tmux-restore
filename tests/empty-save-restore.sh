@@ -34,4 +34,25 @@ T run-shell -b "$RESURRECT/restore.sh"
 for _ in $(seq 60); do grep -q "done" "$D/log" 2> /dev/null && break; sleep 0.5; done
 check "restored from the last good save" "one two" "$(T list-windows -t work -F '#W' 2> /dev/null | tr '\n' ' ' | sed 's/ $//')"
 check "last points at the good save again" yes "$(grep -q $'^pane\twork' "$R/last" && echo yes)"
+
+# Two saves in the same second at shutdown, the second after the server went away: the second
+# rewrites the first's file, finds it the same as `last` (it is `last`) and deletes it. `last`
+# points at nothing, and resurrect doesn't even start a restore, so its pre-restore hook can't
+# mend it. tmux-restore mends it as it loads, before anything restores.
+T run-shell "$RESURRECT/save.sh quiet"
+good=$(readlink "$R/last")
+T kill-server; sleep 1
+stamp=${good#tmux_resurrect_}; stamp=${stamp%.txt}
+mkdir -p "$D/bin"; printf '#!/bin/sh\necho %s\n' "$stamp" > "$D/bin/date"; chmod +x "$D/bin/date"
+HOME=$D/home XDG_DATA_HOME="" TMUX="$socket,0,0" PATH="$D/bin:$PATH" bash "$RESURRECT/save.sh" quiet > /dev/null 2>&1
+check "two saves in one second left last pointing at nothing (the bug this guards against)" yes "$([[ -L $R/last && ! -e $R/last ]] && echo yes)"
+
+: > "$D/log"
+printf '%s\n' "set -g @resurrect-processes 'false'" "set -g @resurrect-capture-pane-contents 'off'" \
+	"set -g @resurrect-hook-post-restore-all \"echo done >> '$D/log'\"" "run-shell '$here/../tmux-restore.tmux'" > "$D/plugin.conf"
+T -f "$D/plugin.conf" new-session -d -s scratch; sleep 1
+T run-shell -b "$RESURRECT/restore.sh"
+for _ in $(seq 60); do grep -q "done" "$D/log" 2> /dev/null && break; sleep 0.5; done
+check "restored though last pointed at nothing (tmux-restore mended it as it loaded)" "one two" "$(T list-windows -t work -F '#W' 2> /dev/null | tr '\n' ' ' | sed 's/ $//')"
+check "last points at a save with panes" yes "$(grep -q $'^pane\twork' "$R/last" && echo yes)"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

@@ -24,4 +24,24 @@ run "$shutdown" ""
 check "no option: default path" "$D/home/.tmux/plugins/tmux-resurrect/scripts/save.sh quiet" "$(cat "$D/saves")"
 run "${shutdown/true/false}"$'\n'"/org/freedesktop/login1: org.freedesktop.login1.Manager.PrepareForSleep (true,)" "$D/save.sh"
 check "other signals: exit" 1 "$rc"; check "other signals: no save" "" "$(cat "$D/saves")"
+
+# scripts/stop-save.sh, tmux.service's save as it stops: only with the server there and the
+# system running. Its fake tmux is outside PATH, found through the path it's given.
+mkdir -p "$D/tmuxdir" "$D/sysbin"
+printf '#!/bin/sh\ncase "$1" in has-session) [ -e "%s/up" ] ;; show-option) cat "%s/save-path" ;; esac\n' "$D" "$D" > "$D/tmuxdir/tmux"
+printf '#!/bin/sh\ncase "$*" in *--user*) cat "%s/user-state" ;; *) cat "%s/system-state" ;; esac\n' "$D" "$D" > "$D/sysbin/systemctl"
+chmod +x "$D/tmuxdir/tmux" "$D/sysbin/systemctl"
+stop() {  # $1 = server up?, $2 = system state, $3 = user manager state
+	rm -f "$D/up"; [[ $1 == up ]] && : > "$D/up"
+	echo "$2" > "$D/system-state"; echo "$3" > "$D/user-state"; printf '%s' "$D/save.sh" > "$D/save-path"; : > "$D/saves"
+	HOME="$D/home" PATH="$D/sysbin:/usr/bin:/bin" "$here/../scripts/stop-save.sh" "$D/tmuxdir/tmux"; rc=$?
+}
+stop down running running
+check "stop, no server: exit" 0 "$rc"; check "stop, no server: no save" "" "$(cat "$D/saves")"
+stop up stopping running
+check "stop at shutdown: exit" 0 "$rc"; check "stop at shutdown: no save" "" "$(cat "$D/saves")"
+stop up running stopping
+check "stop as the user manager stops: no save" "" "$(cat "$D/saves")"
+stop up running running
+check "stop by hand: exit" 0 "$rc"; check "stop by hand: saves once" "$D/save.sh quiet" "$(cat "$D/saves")"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

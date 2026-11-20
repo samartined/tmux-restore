@@ -103,20 +103,27 @@ reads `last` only after its pre-restore-all hook, so
 save that has panes ([`scripts/mend-last.sh`](../scripts/mend-last.sh)). Two saves in the same
 second (the 5-minute save and continuum's, say) write the same file: one makes it `last`, the
 other finds it unchanged and deletes it, so `last` points at nothing and a restore wouldn't even
-start. The post-save-all hook ([`scripts/post-save.sh`](../scripts/post-save.sh)) runs the same
-mending after every save. A save of a live server that reads no panes (tmux in the C locale turns
+start, so its pre-restore hook never runs. The post-save-all hook
+([`scripts/post-save.sh`](../scripts/post-save.sh)) runs the same mending after every save, and
+the plugin runs it as it loads, before continuum or the safety net restores: no hook runs after a
+save made once the server is gone. A save of a live server that reads no panes (tmux in the C locale turns
 resurrect's tabs into `_`) is caught earlier: the save hook makes it a copy of `last`, so resurrect
 deletes it, and puts the old scrollback back for the archive resurrect rebuilds next.
 
 ## A save while the system shuts down
 
 At shutdown systemd stops units in parallel: the scopes your panes run in, and `tmux.service`
-(`@continuum-boot`), which saves as it stops. That save can find the panes' programs gone or
-exiting: no conversation to resume, panes with no command. The save hook drops any save made while
-the system or your systemd user manager is stopping (`systemctl is-system-running` says
-`stopping`), the same way as a save with no panes: `last` stays the save taken before shutdown
-began. That one, from [`scripts/shutdown-save.sh`](../scripts/shutdown-save.sh), sets
-`TMUX_RESTORE_SHUTDOWN_SAVE=1` and is kept.
+(`@continuum-boot`), which tmux-continuum has save as it stops. That save finds the panes'
+programs gone or exiting (no conversation to resume, panes with no command), or the server gone:
+then it's empty, and in the same second as the save before shutdown it deletes that one (above).
+So the installer points that save at [`scripts/stop-save.sh`](../scripts/stop-save.sh), with a
+drop-in (`tmux.service.d/tmux-restore-stop.conf`): it saves only when you stop `tmux.service`
+yourself, with the server there and the system running. Not for a `tmux.service` of your own.
+And the save hook drops any save made while the system or your systemd user manager is stopping
+(`systemctl is-system-running` says `stopping`), the same way as a save with no panes: `last`
+stays the save taken before shutdown began. That one, from
+[`scripts/shutdown-save.sh`](../scripts/shutdown-save.sh), sets `TMUX_RESTORE_SHUTDOWN_SAVE=1`
+and is kept.
 
 ## A pane with an empty title
 
@@ -239,4 +246,5 @@ three seconds after the server did, tmux-restore runs it, under continuum's othe
 | [`scripts/lib.sh`](../scripts/lib.sh) | process inspection (`/proc`, or `ps`/`lsof`) and flag filtering |
 | [`agents/*.sh`](../agents) | one adapter per agent |
 | [`scripts/shutdown-save.sh`](../scripts/shutdown-save.sh) | the save at shutdown (Linux) |
+| [`scripts/stop-save.sh`](../scripts/stop-save.sh) | `tmux.service`'s save as it stops: only when you stop it yourself (Linux) |
 | [`scripts/shutdown-watcher.swift`](../scripts/shutdown-watcher.swift) | the save at shutdown (macOS) |

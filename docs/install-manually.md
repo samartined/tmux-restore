@@ -85,6 +85,18 @@ systemctl --user enable --now tmux-restore-save.timer
 
 If your plugins aren't in `~/.tmux/plugins`, fix the `ExecStart=` paths in the copied files.
 
+If tmux starts at boot through tmux-continuum (`set -g @continuum-boot 'on'`), its `tmux.service`
+saves again as it stops, and at shutdown that save can delete the one above. Have it save only
+when you stop it yourself:
+
+```sh
+mkdir -p ~/.config/systemd/user/tmux.service.d
+printf '[Service]\nExecStop=\nExecStop=-"%s" "%s"\nExecStop="%s" kill-server\n' \
+	~/.tmux/plugins/tmux-restore/scripts/stop-save.sh "$(command -v tmux)" "$(command -v tmux)" \
+	> ~/.config/systemd/user/tmux.service.d/tmux-restore-stop.conf
+systemctl --user daemon-reload
+```
+
 If you leave tmux running when you log out, as on a server you reach over SSH, also run
 `loginctl enable-linger`. tmux only runs the save every minute while a client is attached, and
 without lingering the services (the shutdown save, and the timer that saves every 5 minutes) stop
@@ -161,7 +173,8 @@ Save with prefix + Ctrl-s, run `tmux kill-server`, then start tmux again.
 - Remove the lines from `~/.tmux.conf` (and the venv line from `~/.zshrc` or `~/.bashrc`), and
   delete `~/.tmux/plugins/tmux-restore`.
 - Linux: `systemctl --user disable --now tmux-restore.service`, then delete
-  `~/.config/systemd/user/tmux-restore.service`. If you turned on lingering only for this,
+  `~/.config/systemd/user/tmux-restore.service` (and `tmux.service.d/tmux-restore-stop.conf`
+  there, if you made it). If you turned on lingering only for this,
   `loginctl disable-linger`.
 - macOS: `launchctl bootout gui/$(id -u)/io.github.andrewboldi.tmux-restore`, then delete
   `~/Library/LaunchAgents/io.github.andrewboldi.tmux-restore.plist`.

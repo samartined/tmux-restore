@@ -7,6 +7,11 @@ option() { tmux show-option -gqv "$1"; }
 default() { [ -n "$(option "$1")" ] || tmux set-option -g "$1" "$2"; }
 
 main() {
+	# Before anything restores (continuum and scripts/restore-safety-net.sh both wait a moment):
+	# resurrect won't start a restore when `last` points at nothing, so its pre-restore hook can't
+	# mend it then (scripts/mend-last.sh).
+	"$CURRENT_DIR/scripts/mend-last.sh"
+
 	default @continuum-restore on        # restore when the tmux server starts
 	default @continuum-save-interval 1   # save every minute
 	default @resurrect-capture-pane-contents on
