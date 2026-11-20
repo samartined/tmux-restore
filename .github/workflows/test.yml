@@ -38,6 +38,7 @@ jobs:
       - run: tests/restore-lock-release.sh bg-hook
       - run: tests/restore-safety-net.sh
       - run: tests/empty-save-restore.sh
+      - run: tests/restore-security.sh
       - run: tests/venv-restore.sh
       - run: tests/startup-prompt.sh
 
@@ -80,6 +81,8 @@ jobs:
         run: tests/trust-home-unit.sh
       - if: success() || failure() # run every check, to see them all
         run: tests/empty-save-restore.sh
+      - if: success() || failure() # run every check, to see them all
+        run: tests/restore-security.sh
       - if: success() || failure() # run every check, to see them all
         run: tests/restore-race.sh double
       - if: success() || failure() # run every check, to see them all

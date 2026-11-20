@@ -53,8 +53,8 @@ acme_session() {
 
 # <name>_resume PID ID: print the command that reopens conversation ID.
 acme_resume() {
-	proc_args "$1" || return 1
-	printf 'acme --resume %s%s' "$2" "$(keep_flags acme "${ARGV[@]}")"
+	is_uuid "$2" && proc_args "$1" || return 1
+	printf 'acme --resume %q%s' "$2" "$(keep_flags acme "${ARGV[@]}")"
 }
 
 # Optional. <name>_continue PID: print a command that reopens the latest conversation in PID's
@@ -88,8 +88,12 @@ Helpers from [`scripts/lib.sh`](scripts/lib.sh), which work on Linux and macOS:
 | `proc_children PID`, `proc_descendants PID` | child pids |
 | `keep_flags NAME ARG...` | the flags worth keeping, shell-quoted |
 | `unique_line` | passes stdin through only if it's exactly one line |
+| `is_uuid ID` | succeeds if ID is a UUID |
 
 Rules of thumb:
+- **The id is untrusted.** It comes from the agent's files and goes into a command that runs at
+  restore: take only the form your agent's ids have (`is_uuid`, or a pattern of your own) and
+  quote it with `%q`.
 - **Never guess.** If the conversation can only be found by a heuristic (start times,
   directories), require a unique match (`unique_line`) or fail. A wrong conversation is worse
   than a fallback.

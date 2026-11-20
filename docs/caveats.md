@@ -12,11 +12,17 @@ Without them, the installer says so and the minute-by-minute save still runs.
 showed every minute, in its save folder (usually `~/.local/share/tmux/resurrect`), in one file
 it overwrites (`pane_contents.tar.gz`). tmux-restore keeps only the visible screen, not the
 scrollback (`@resurrect-pane-contents-area 'visible'`; `'full'` for all of it), and makes the
-folder readable only by you. Whatever was on screen goes in, a password or token included. Each
+folder and its files readable only by you, from the first save on. Whatever was on screen goes in, a password or token included. Each
 save also records every pane's command line; saves are deleted once 2 days old
 (`@resurrect-delete-backup-after 1`), keeping the newest 5. To stop saving pane contents, add
 `set -g @resurrect-capture-pane-contents 'off'` to your tmux config, then delete
 `pane_contents.tar.gz` from that folder.
+
+**Some characters in session and window names become `_`.** `'` `"` `` ` `` `$` `\` `;` `&` `|`
+`<` `>` `(` `)`: resurrect puts the session name into a command it runs through the shell to show
+a pane's saved contents, so a name with them could run code at restore. A session named with them
+comes back with `_` in their place and without what its panes showed; two names that differ only
+there come back as one session.
 
 **Programs restart; they aren't checkpointed.** An agent gets its conversation back, not a tool
 call or command it was running at the time.
