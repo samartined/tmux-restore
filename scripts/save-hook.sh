@@ -186,7 +186,7 @@ shutting_down() {
 }
 
 main() {
-	local save_file=$1 line cmd target pid venv i title typing
+	local save_file=$1 line cmd target pid venv i title typer
 	local -a lines out heads cmds keys fields targets
 	local -A pane_pids venvs count pendings
 	# The save folder also gets every pane's scrollback, which can hold secrets: keep it private.
@@ -213,13 +213,11 @@ main() {
 	[[ $(tmux show -gqv default-shell) == */zsh ]] && ZSH=1 # restored panes run default-shell
 	while IFS=$'\t' read -r target pid venv; do pane_pids[$target]=$pid venvs[$target]=$venv; done \
 		< <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{pane_pid}\t#{@tmux-restore-venv}')
-	# the commands a restore hasn't typed yet, waiting for their shell, while
-	# scripts/type-commands.sh still runs to type them
-	typing=$(tmux show -gqv @tmux-restore-typing)
-	if [[ -n $typing ]] && kill -0 "$typing" 2> /dev/null; then
-		while IFS=$'\t' read -r target cmd; do [[ -n $cmd ]] && pendings[$target]=$cmd; done \
-			< <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{@tmux-restore-pending}')
-	fi
+	# the commands a restore hasn't typed yet, waiting for their shell, while the
+	# scripts/type-commands.sh that waits to type each one still runs
+	while IFS=$'\t' read -r target typer cmd; do
+		[[ -n $cmd && $typer =~ ^[0-9]+$ ]] && kill -0 "$typer" 2> /dev/null && pendings[$target]=$cmd
+	done < <(tmux list-panes -a -F $'#{session_name}:#{window_index}.#{pane_index}\t#{@tmux-restore-typer}\t#{@tmux-restore-pending}')
 
 	mapfile -t lines < "$save_file"
 	for i in "${!lines[@]}"; do

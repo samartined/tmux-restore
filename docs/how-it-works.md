@@ -150,16 +150,19 @@ seconds (or after 10 seconds at the prompt, for a prompt with a clock). How it t
 - A shell that sources [`scripts/shell-hook.sh`](../scripts/shell-hook.sh) says so at its first
   prompt; then it's at its prompt whenever its process group has the terminal.
 - Otherwise, the terminal's foreground (`ps` marks it with a `+`) must be a single program, a
-  shell, and asleep. A question is another program (`ssh-add`, `sudo`), and a shell still running
-  its startup files is awake now and then. Where `ps` can't list a terminal's programs (BusyBox),
-  it types at once, as resurrect does.
+  shell, asleep, with its line editor holding the terminal. A question is another program
+  (`ssh-add`, `sudo`), or a script, or the shell's own `read`, and those leave the terminal in
+  canonical mode (`stty -a` shows `icanon`), while zle, readline and fish's editor turn it off at
+  the prompt. A shell still running its startup files is awake now and then. `sh`, `dash` and
+  `ksh` may have no line editor, so the pane's own shell counts if it's one of them. Where `ps`
+  or `stty` can't tell (BusyBox), it types at once, as resurrect does.
 
 Until then nothing is typed into the pane. Answer the question, or give it up with Ctrl-C, and
-the command is typed a couple of seconds later. A pane waits up to a day
+the command is typed a couple of seconds later. A pane waits up to a week
 (`TMUX_RESTORE_WAIT_SECS` in tmux's environment), then its command is dropped. Meanwhile the
-command is kept in the pane option `@tmux-restore-pending`, and while `type-commands.sh` runs, a
-save keeps it as that pane's command, so the conversation isn't lost if it waits past the next
-save. Panes that existed before the restore get nothing typed, as with resurrect
+command is kept in the pane option `@tmux-restore-pending`, and the waiting process's id in
+`@tmux-restore-typer`; while that process runs, a save keeps the command as that pane's, so the
+conversation isn't lost if it waits past the next save. Panes that existed before the restore get nothing typed, as with resurrect
 ([`scripts/pre-restore.sh`](../scripts/pre-restore.sh) notes them). Programs resurrect restarts
 by itself (`vim`, `htop`, what your `@resurrect-processes` lists) are still typed by resurrect,
 at once, and so is a `TMUX_RESTORE=1` command that an entry of yours matches (`"~x"` matches `x`
@@ -196,8 +199,8 @@ made one space, since Claude Code wraps its text to the pane's width (80 columns
 attached). Each answer goes in
 `~/.local/state/tmux-restore/trust.log`. A command can be typed after those 2 minutes, once a
 question at shell startup is answered (see [Typing the commands](#typing-the-commands)), so it
-keeps watching, every few seconds, while commands wait to be typed, and for 2 minutes after the
-last one. See [caveats](caveats.md) for why that's safe.
+keeps watching, every few seconds, while commands wait to be typed, and answers in a pane for 2
+minutes after a command is typed there (`@tmux-restore-typed`). See [caveats](caveats.md) for why that's safe.
 
 ## Options
 

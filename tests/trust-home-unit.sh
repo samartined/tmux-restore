@@ -11,15 +11,10 @@ H=$D/home
 cat > "$D/bin/tmux" <<EOF
 #!/usr/bin/env bash
 case "\$1" in
-list-panes) cat "$D/panes" ;;
+list-panes) if [[ \$* == *@tmux-restore-typer* ]]; then cat "$D/typers" 2> /dev/null; else cat "$D/panes"; fi ;;
 capture-pane) cat "$D/screen\${4}" ;;
 display-message) echo "session\${4}" ;;
-show-option)
-	case \$3 in
-	@tmux-restore-trust-home) cat "$D/option" 2> /dev/null ;;
-	@tmux-restore-typing) cat "$D/typing-pid" 2> /dev/null ;;
-	@tmux-restore-last-typed) cat "$D/last-typed" 2> /dev/null ;;
-	esac ;;
+show-option) [[ \$3 == @tmux-restore-trust-home ]] && cat "$D/option" 2> /dev/null ;;
 send-keys)
 	echo "\$3 \$4" >> "$D/keys"
 	if [[ \$4 == Down && ! -e "$D/stuck\$3" ]]; then
@@ -74,21 +69,28 @@ check "logged: left alone" 1 "$(grep -c "session%4 .*%4 .*left alone" "$D/state/
 check "only those four logged" 4 "$(wc -l < "$D/state/tmux-restore/trust.log" | tr -d ' ')"
 
 # A command typed late (its shell's startup asked something, answered after a while): it keeps
-# watching while scripts/type-commands.sh still waits to type commands, and stops after that.
+# watching while scripts/type-commands.sh still waits to type commands, answers where a command
+# was typed lately, and stops after that.
 : > "$D/keys"; rm -f "$D/state/tmux-restore/trust.log"
-printf '%%9\t%s\t109\n' "$H" > "$D/panes"
+printf '%%8\t%s\t108\t\n%%9\t%s\t109\t\n' "$H" "$H" > "$D/panes"
+echo "claude --resume 5555-6666" > "$D/args108" # started by hand: not typed by tmux-restore
 echo "claude --resume 3333-4444" > "$D/args109"
-echo "zsh" > "$D/screen%9"
+echo "zsh" > "$D/screen%8"; echo "zsh" > "$D/screen%9"
 sleep 60 & typing=$!
-echo $typing > "$D/typing-pid"
-HOME=$H XDG_STATE_HOME=$D/state TMUX_RESTORE_TRUST_SECS=1 PATH="$D/bin:$PATH" bash "$here/../scripts/trust-home.sh" &
+printf '%s|\n' $typing > "$D/typers" # pane %9 waits for its command
+HOME=$H XDG_STATE_HOME=$D/state TMUX_RESTORE_TRUST_SECS=5 PATH="$D/bin:$PATH" bash "$here/../scripts/trust-home.sh" &
 watcher=$!
-sleep 2.5                      # past its own time
-prompt "$H" > "$D/screen%9"    # claude typed late, at the prompt
-sleep 6                        # it looks every 5 seconds while it waits
-check "typed late: answered" "%9 Down"$'\n'"%9 Enter" "$(grep '^%9 ' "$D/keys")"
+sleep 5.5 # past its own time
+# claude typed late in %9; one started by hand in %8 shows the prompt too
+now=$(date +%s)
+printf '%%8\t%s\t108\t\n%%9\t%s\t109\t%s\n' "$H" "$H" "$now" > "$D/panes"
+printf '|%s\n' "$now" > "$D/typers"
 kill $typing; wait $typing 2> /dev/null
-sleep 6
+prompt "$H" > "$D/screen%8"; prompt "$H" > "$D/screen%9"
+sleep 5 # it was looking every 5 seconds while waiting
+check "typed late: answered" "%9 Down"$'\n'"%9 Enter" "$(grep '^%9 ' "$D/keys")"
+check "not typed by tmux-restore, after its time: left alone" "" "$(grep '^%8 ' "$D/keys")"
+sleep 4
 check "nothing left to type: it stopped" "" "$(kill -0 $watcher 2> /dev/null && echo running)"
 kill $watcher 2> /dev/null
 

@@ -7,7 +7,7 @@
 # work in $HOME and show exactly that prompt for $HOME, and logs each one. Nothing else is touched:
 # other folders, other prompts, other panes. A command can be typed later than that, once a
 # question at shell startup is answered (scripts/type-commands.sh): this keeps watching while
-# commands wait to be typed, and for 2 minutes after the last one.
+# commands wait to be typed, and answers in a pane for 2 minutes after a command is typed there.
 # Runs with macOS's bash 3.2 too.
 secs=${TMUX_RESTORE_TRUST_SECS:-120}
 log=${XDG_STATE_HOME:-$HOME/.local/state}/tmux-restore/trust.log
@@ -52,20 +52,27 @@ note() {
 	echo "$(date '+%F %T') $(tmux display-message -p -t "$1" '#{session_name}') $1 $2" >> "$log"
 }
 
-# more: keep watching
+# lately TIME: TIME (seconds since 1970), when scripts/type-commands.sh typed a pane's command,
+# was less than 2 minutes ago
+lately() { [[ $1 =~ ^[0-9]+$ ]] && (($(date +%s) - $1 < secs)); }
+
+# more: keep watching, after the first 2 minutes while a command was typed lately or one still
+# waits to be typed
 more() {
 	((SECONDS < end)) && return 0
-	local last typing
-	last=$(tmux show-option -gqv @tmux-restore-last-typed)
-	[[ $last =~ ^[0-9]+$ ]] && (($(date +%s) - last < secs)) && return 0
-	typing=$(tmux show-option -gqv @tmux-restore-typing)
-	[[ -n $typing ]] && kill -0 "$typing" 2> /dev/null || return 1
+	local typer typed waiting=""
+	while IFS='|' read -r typer typed; do
+		lately "$typed" && return 0
+		[[ $typer =~ ^[0-9]+$ ]] && kill -0 "$typer" 2> /dev/null && waiting=1
+	done < <(tmux list-panes -a -F '#{@tmux-restore-typer}|#{@tmux-restore-typed}' 2> /dev/null)
+	[[ -n $waiting ]] || return 1
 	sleep 4 # nothing typed lately: look less often
 }
 
 while more; do
-	while IFS=$'\t' read -r pane path pid; do
+	while IFS=$'\t' read -r pane path pid typed; do
 		[[ $path == "$HOME" && $handled != *" $pane "* ]] || continue
+		((SECONDS < end)) || lately "$typed" || continue # after that, only panes typed into lately
 		home_prompt "$(tmux capture-pane -p -t "$pane")" || continue
 		handled+="$pane "
 		if ! exact "$pid"; then
@@ -80,6 +87,6 @@ while more; do
 		else
 			note "$pane" "left alone: the prompt's menu didn't move to Yes"
 		fi
-	done < <(tmux list-panes -a -F $'#{pane_id}\t#{pane_current_path}\t#{pane_pid}')
+	done < <(tmux list-panes -a -F $'#{pane_id}\t#{pane_current_path}\t#{pane_pid}\t#{@tmux-restore-typed}')
 	sleep 1
 done

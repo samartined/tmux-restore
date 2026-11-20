@@ -4,11 +4,13 @@
 # passphrase", and whatever is typed into the pane then goes to that question. So the commands
 # the save hook wrote (TMUX_RESTORE=1 ...) must be typed only once the pane's shell is at its
 # prompt: not into the question, then right after it's answered, and kept in saves meanwhile.
-# Here the startup files ask through an outside program reading the terminal, as ssh-add does.
+# Here the startup files ask through an outside program reading the terminal, as ssh-add does
+# (a script run by sh: under zsh it has the terminal to itself, and it's a shell, asleep).
 # Also: a startup busy for a while before it asks, a startup that starts another shell, a shell
 # whose output goes through a process substitution (it says when it's ready through
 # scripts/shell-hook.sh), an entry of the user's in @resurrect-processes that matches the
-# commands (resurrect types those, once), and giving up after TMUX_RESTORE_WAIT_SECS.
+# commands (resurrect types those, once), giving up after TMUX_RESTORE_WAIT_SECS, a question the
+# startup files ask with the shell's own `read`, and dash, which has no line editor.
 # Throwaway servers in their own socket directory and HOME.
 # PLUGINS_DIR (default ~/.tmux/plugins) must contain tmux-resurrect. Needs zsh.
 set -u
@@ -39,7 +41,8 @@ rc="PS1='$ '
 [ -e '$D/hook' ] && . '$D/plugins/tmux-restore/scripts/shell-hook.sh'
 [ -e '$D/tee' ] && [ -n \"\$BASH_VERSION\" ] && exec > >(tee -a '$D/tee.log')
 [ -e '$D/busy' ] && { e=\$((SECONDS + 4)); while [ \$SECONDS -lt \$e ]; do :; done; }
-[ -e '$D/ask' ] && '$D/ask.sh' < /dev/tty
+[ -e '$D/ask' ] && sh '$D/ask.sh' < /dev/tty
+[ -e '$D/askb' ] && { printf 'Name: '; read -r n; echo \"\$n\" >> '$D/answers'; }
 [ -e '$D/nest' ] && [ -n \"\$BASH_VERSION\" ] && zsh"
 echo 'unsetopt GLOBAL_RCS' > "$D/home/.zshenv"
 printf '%s\n' "$rc" > "$D/home/.zshrc"
@@ -75,6 +78,7 @@ stop() {
 	[[ -n $pid ]] && until_ok 5 eval "! kill -0 $pid 2> /dev/null"
 }
 prompt() { t capture-pane -p -t "$1" | grep -q '\$$'; }
+shows() { [[ $(t capture-pane -p -t "$1") == *"$2"* ]]; }
 asking() { t capture-pane -p -t "$1" | grep -q 'Enter passphrase for key:'; }
 ran() { [[ -e $D/ran.$1 ]]; }
 times_ran() { cat "$D/ran.$1" 2> /dev/null | wc -l | tr -d ' '; }
@@ -202,5 +206,38 @@ for sh in bash zsh; do
 	check "$sh: given up: nothing ran" "" "$(ran_list)"
 	stop
 	rm -f "$D/ask"
+
+	# 8. The startup asks with the shell's own `read`: nothing typed until it's answered
+	cp "$D/crafted.txt" "$D/resurrect/crafted.txt" && ln -fs crafted.txt "$D/resurrect/last"
+	rm -f "$D"/ran.* "$D/answers"
+	: > "$D/askb"
+	start "$(command -v $sh)" new-session -d -s scratch
+	t run-shell "$D/plugins/tmux-resurrect/scripts/restore.sh"
+	until_ok shows main:0.0 'Name:' || bad "$sh: the startup didn't ask with read"
+	sleep 5
+	check "$sh: read: the command isn't given as the answer" "" "$(cat "$D/answers" 2> /dev/null)"
+	t send-keys -t main:0.0 -l 'me'
+	t send-keys -t main:0.0 Enter
+	until_ok ran 0 || bad "$sh: read answered, the command didn't run"
+	check "$sh: read: the question got the answer" "me" "$(cat "$D/answers" 2> /dev/null)"
+	stop
+	rm -f "$D/askb"
 done
+
+# 9. dash has no line editor: its prompt leaves the terminal in canonical mode, like a question,
+# but a dash that is the pane's own shell counts
+if command -v dash > /dev/null; then
+	rm -rf "$D/resurrect" "$D"/ran.*
+	start "$(command -v dash)" new-session -d -s main -c "$D/proj"
+	until_ok prompt main:0.0 || bad "dash: no prompt"
+	t run-shell "$D/plugins/tmux-resurrect/scripts/save.sh quiet"
+	save=$(readlink -f "$D/resurrect/last")
+	awk -F'\t' -v OFS='\t' -v d="$D" '$1 == "pane" { $11 = ":TMUX_RESTORE=1 echo x >> " d "/ran." $6 } { print }' \
+		"$save" > "$save.new" && mv "$save.new" "$save"
+	stop
+	start "$(command -v dash)" new-session -d -s scratch
+	t run-shell "$D/plugins/tmux-resurrect/scripts/restore.sh"
+	until_ok ran 0 || bad "dash: the command didn't run"
+	stop
+fi
 echo "passed=$pass failed=$fail"; ((fail == 0))
