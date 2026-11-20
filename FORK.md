@@ -16,6 +16,7 @@ agent can follow it step by step.
 | Saves keep only each pane's visible screen, not its scrollback, and are deleted after 2 days instead of 30 | Less of what panes showed (a password, a token) sits on disk, and nothing to clean by hand | Fork only |
 | A Claude Code still at a prompt on start keeps the conversation it was started for (`--resume <id>`), or comes back typed, never as `--continue` | It isn't registered until the prompt is answered: it was saved as `--continue`, which opened another pane's conversation | Not proposed yet |
 | A save made while the system shuts down is dropped, and a pane with an empty title is saved unshifted | At shutdown `tmux.service` saved after the panes' programs had stopped, and an empty title shifted resurrect's fields: a reboot restored panes with no conversation, in the wrong folder | Not proposed yet. The empty title is a tmux-resurrect bug |
+| tmux-restore types the saved commands itself after a restore, each once its pane's shell is at its prompt, instead of resurrect typing them as soon as the pane exists | At boot, a shell whose startup asks for a passphrase (keychain, `ssh-add`) took the agent's resume command as the passphrase: the conversation didn't come back and was gone from the next save | Not proposed yet |
 | tmux starts at boot on Linux (`@continuum-boot`), and `--uninstall` turns that off again | After a power cut everything comes back with nobody logging in | Fork only |
 | The installer installs this fork, can pin a ref (`TMUX_RESTORE_REF`), and doesn't install sqlite3 | One version on every machine; sqlite3 (opencode only) needed root | Fork only |
 
@@ -23,6 +24,7 @@ agent can follow it step by step.
 
 | Tag | Upstream base | Notes |
 |---|---|---|
+| `fork.10` | `94c8488` | saved commands are typed once each pane's shell is at its prompt: a startup asking for a passphrase no longer swallows them |
 | `fork.9` | `94c8488` | a Claude Code at a prompt on start keeps its conversation, never becomes `--continue` |
 | `fork.8` | `94c8488` | the home-folder trust prompt is answered in an 80-column pane too (its text wraps), and only for a `claude --resume <id>` |
 | `fork.7` | `94c8488` | saves keep the visible screen only and are deleted after 2 days |

@@ -11,6 +11,7 @@ cat > "$D/bin/tmux" <<EOF
 case "\$*" in
 *@resurrect-dir*) cat "$D/dir-option" 2> /dev/null ;;
 set-option*) echo "\$*" >> "$D/tmux.log" ;;
+list-panes*) printf '%%1\n%%2\n' ;;
 esac
 exit 0
 EOF
@@ -31,7 +32,8 @@ ln -s tmux_resurrect_3.txt "$R/last"
 run
 check "empty last: exit" 0 "$rc"
 check "empty last: points at the newest save with panes" tmux_resurrect_2.txt "$(readlink "$R/last")"
-check "still marks the restore" "set-option -g @tmux-restore-restored 1" "$(cat "$D/tmux.log")"
+check "still marks the restore" "set-option -g @tmux-restore-restored 1" "$(head -1 "$D/tmux.log")"
+check "notes the panes already there" "set-option -g @tmux-restore-existing %1 %2 " "$(sed -n 2p "$D/tmux.log")"
 
 ln -fs tmux_resurrect_1.txt "$R/last"
 run

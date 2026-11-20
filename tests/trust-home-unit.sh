@@ -11,7 +11,7 @@ H=$D/home
 cat > "$D/bin/tmux" <<EOF
 #!/usr/bin/env bash
 case "\$1" in
-list-panes) cat "$D/panes" ;;
+list-panes) if [[ \$* == *@tmux-restore-typer* ]]; then cat "$D/typers" 2> /dev/null; else cat "$D/panes"; fi ;;
 capture-pane) cat "$D/screen\${4}" ;;
 display-message) echo "session\${4}" ;;
 show-option) [[ \$3 == @tmux-restore-trust-home ]] && cat "$D/option" 2> /dev/null ;;
@@ -68,11 +68,44 @@ check "logged: accepted" 1 "$(grep -c "session%1 .*%1 .*trusted $H" "$D/state/tm
 check "logged: left alone" 1 "$(grep -c "session%4 .*%4 .*left alone" "$D/state/tmux-restore/trust.log")"
 check "only those four logged" 4 "$(wc -l < "$D/state/tmux-restore/trust.log" | tr -d ' ')"
 
-# post-restore.sh starts it only with @tmux-restore-trust-home on
+# A command typed late (its shell's startup asked something, answered after a while): it keeps
+# watching while scripts/type-commands.sh still waits to type commands, answers where a command
+# was typed lately, and stops after that.
+: > "$D/keys"; rm -f "$D/state/tmux-restore/trust.log"
+printf '%%8\t%s\t108\t\n%%9\t%s\t109\t\n' "$H" "$H" > "$D/panes"
+echo "claude --resume 5555-6666" > "$D/args108" # started by hand: not typed by tmux-restore
+echo "claude --resume 3333-4444" > "$D/args109"
+echo "zsh" > "$D/screen%8"; echo "zsh" > "$D/screen%9"
+sleep 60 & typing=$!
+printf '%s|\n' $typing > "$D/typers" # pane %9 waits for its command
+HOME=$H XDG_STATE_HOME=$D/state TMUX_RESTORE_TRUST_SECS=5 PATH="$D/bin:$PATH" bash "$here/../scripts/trust-home.sh" &
+watcher=$!
+sleep 5.5 # past its own time
+# claude typed late in %9; one started by hand in %8 shows the prompt too
+now=$(date +%s)
+printf '%%8\t%s\t108\t\n%%9\t%s\t109\t%s\n' "$H" "$H" "$now" > "$D/panes"
+printf '|%s\n' "$now" > "$D/typers"
+kill $typing; wait $typing 2> /dev/null
+prompt "$H" > "$D/screen%8"; prompt "$H" > "$D/screen%9"
+sleep 5 # it was looking every 5 seconds while waiting
+check "typed late: answered" "%9 Down"$'\n'"%9 Enter" "$(grep '^%9 ' "$D/keys")"
+check "not typed by tmux-restore, after its time: left alone" "" "$(grep '^%8 ' "$D/keys")"
+sleep 4
+check "nothing left to type: it stopped" "" "$(kill -0 $watcher 2> /dev/null && echo running)"
+kill $watcher 2> /dev/null
+
+# post-restore.sh starts it only with @tmux-restore-trust-home on; scripts/type-commands.sh, always
 printf '#!/bin/sh\necho started >> "%s/started"\n' "$D" > "$D/fake-trust.sh"; chmod +x "$D/fake-trust.sh"
-run_post() { rm -f "$D/started"; TMUX_RESTORE_TRUST_HOME_SCRIPT=$D/fake-trust.sh PATH="$D/bin:$PATH" bash "$here/../scripts/post-restore.sh"; sleep 0.5; }
+printf '#!/bin/sh\necho typing >> "%s/typing"\n' "$D" > "$D/fake-type.sh"; chmod +x "$D/fake-type.sh"
+run_post() {
+	rm -f "$D/started" "$D/typing"
+	TMUX_RESTORE_TRUST_HOME_SCRIPT=$D/fake-trust.sh TMUX_RESTORE_TYPE_SCRIPT=$D/fake-type.sh PATH="$D/bin:$PATH" bash "$here/../scripts/post-restore.sh"
+	sleep 0.5
+}
 rm -f "$D/option"; run_post
 check "option off: not started" "" "$(cat "$D/started" 2> /dev/null)"
+check "option off: commands typed anyway" typing "$(cat "$D/typing" 2> /dev/null)"
 echo on > "$D/option"; run_post
 check "option on: started" started "$(cat "$D/started" 2> /dev/null)"
+check "option on: commands typed too" typing "$(cat "$D/typing" 2> /dev/null)"
 echo "passed=$pass failed=$fail"; (( fail == 0 ))

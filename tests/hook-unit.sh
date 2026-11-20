@@ -111,6 +111,22 @@ tmux set-option -p -t "$(printf '%s:%s.%s' $target)" @tmux-restore-venv "$D/venv
 printf 'pane\t%s\t%s\t1\t:*\t%s\tzsh\t:/tmp\t1\tzsh\t:\n' $target > "$D/save"
 main "$D/save"
 check "venv: read from the pane option" ":TMUX_RESTORE=1 . '$D/venv/bin/activate' 2> /dev/null" "$(cut -f11 "$D/save")"
+# A command a restore hasn't typed yet, waiting for the pane's shell (its startup asked something:
+# scripts/type-commands.sh), is kept as it is, whatever runs there meanwhile; no venv put in front.
+tmux set-option -p -t "$(printf '%s:%s.%s' $target)" @tmux-restore-pending "TMUX_RESTORE=1 claude --resume U1 --name x"
+tmux set-option -p -t "$(printf '%s:%s.%s' $target)" @tmux-restore-typer $$ # while it runs
+printf 'pane\t%s\t%s\t1\t:*\t%s\tzsh\t:/tmp\t1\tssh-add\t:ssh-add /home/u/.ssh/id_ed25519\n' $target > "$D/save"
+main "$D/save"
+check "waiting command: kept" ":TMUX_RESTORE=1 claude --resume U1 --name x" "$(cut -f11 "$D/save")"
+# once it's gone (killed), a waiting command left behind is ignored
+tmux set-option -pu -t "$(printf '%s:%s.%s' $target)" @tmux-restore-venv
+sh -c 'exit 0' & dead=$!; wait $dead
+tmux set-option -p -t "$(printf '%s:%s.%s' $target)" @tmux-restore-typer $dead
+printf 'pane\t%s\t%s\t1\t:*\t%s\tzsh\t:/tmp\t1\tzsh\t:\n' $target > "$D/save"
+main "$D/save"
+check "waiting command, nothing typing it: ignored" ":" "$(cut -f11 "$D/save")"
+tmux set-option -pu -t "$(printf '%s:%s.%s' $target)" @tmux-restore-typer
+tmux set-option -pu -t "$(printf '%s:%s.%s' $target)" @tmux-restore-pending
 # A save with no panes (tmux couldn't be read: the server was going away) must not replace the
 # good save: the hook makes it a copy of `last`, so resurrect sees no change and deletes it.
 mkdir -p "$D/rs"

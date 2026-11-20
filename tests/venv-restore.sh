@@ -107,6 +107,9 @@ for sh in zsh bash; do
 	start "$(command -v $sh)" new-session -d -s scratch
 	t run-shell "$D/plugins/tmux-resurrect/scripts/restore.sh"
 	until_ok prompt main:0.2 || bad "$sh: restored panes have no prompt"
+	# tmux-restore types each pane's command once its shell is at its prompt and still
+	until_ok shows main:0.0 'TMUX_RESTORE=1' || bad "$sh: the idle pane's venv wasn't typed"
+	[[ $sh == zsh ]] && { until_ok shows main:0.2 'TMUX_RESTORE=1' || bad "$sh: the deleted venv's pane got nothing typed"; }
 	check "$sh: restored, idle pane has its venv" "$venv" "$(report 0)"
 	if [[ $sh == zsh ]]; then
 		until_ok shows main:0.1 'sleep 100000' || bad "$sh: the command wasn't typed back"
