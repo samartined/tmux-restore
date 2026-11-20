@@ -30,13 +30,33 @@ something (keychain or `ssh-add` asking for a key's passphrase, a GPG pinentry),
 leaves each pane at that question, and its command, an agent resuming its conversation included,
 waits until you answer it or press Ctrl-C there, up to a week; it's typed a couple of seconds
 later. Nothing is typed into the question. For the agents to come back with nobody there, don't
-ask inside tmux at boot: with keychain, `keychain --noask` starts the agent but adds no key, and
-you add it with `ssh-add` when you need it. With `sh`, `dash` or `ksh` as the
-pane's shell, a question it asks with its own `read` can't be told from its prompt, and gets the
-command as its answer, as before. A shell that keeps another program in its terminal's foreground
+ask inside tmux ([with keychain](#keychain-asks-in-every-pane)). With `sh`, `dash` or `ksh` as
+the pane's shell, a question it asks with its own `read` can't be told from its prompt, and gets
+the command as its answer, as before. A shell that keeps another program in its terminal's foreground
 (its output through `exec > >(tee log)`, say) never looks ready, so its command waits a week and
 is dropped, unless the shell sources `scripts/shell-hook.sh`, which says when it's at its
 prompt.
+
+<a id="keychain-asks-in-every-pane"></a>**keychain asks in every pane.** keychain keeps one
+ssh-agent for the whole machine and asks for your key's passphrase in the first shell that starts
+after boot. tmux starts at boot, before you've typed it anywhere, so every pane asks, and
+answering in one doesn't answer the others. Ask outside tmux only, in your shell's startup file:
+
+```sh
+if [ -n "$TMUX" ]; then
+  eval "$(keychain --eval --quiet --noask ~/.ssh/id_ed25519)"
+else
+  eval "$(keychain --eval --quiet ~/.ssh/id_ed25519)"
+fi
+```
+
+The panes then come back without asking, and you type the passphrase once, in the first terminal
+you open outside tmux. Every pane, and every agent in it, can use the key from then on without
+restarting: a pane gets the agent's address (`SSH_AUTH_SOCK`), not the key, and all of them get
+the same agent, even when they start at once. Until then, `git` and `ssh` fail in the agents,
+since there's no one to ask; `ssh-add` in any pane adds the key for all of them. Anything else
+your startup asks for (a GPG pinentry, a vault login) can skip the question the same way, when
+`$TMUX` is set.
 
 **Pre-typed commands need zsh.** With another shell, a command that isn't safe to re-run comes
 back as an empty prompt.
