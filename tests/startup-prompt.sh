@@ -84,6 +84,8 @@ ran() { [[ -e $D/ran.$1 ]]; }
 times_ran() { cat "$D/ran.$1" 2> /dev/null | wc -l | tr -d ' '; }
 ran_list() { local p out=""; for p in 0 1 2; do ran $p && out+="$p"; done; echo "$out"; }
 pending() { t show-option -pqv -t "$1" @tmux-restore-pending; }
+# no longer waiting in these panes: the command runs a moment before type-commands.sh lets go
+settled() { local p; for p in "$@"; do [[ -z $(pending "$p") ]] || return 1; done; }
 cmd_of() { awk -F'\t' -v p="$1" '$1 == "pane" && $6 == p { print $11 }' "$D/resurrect/last"; }
 
 # Earlier versions had resurrect type these commands, through an entry in @resurrect-processes:
@@ -114,6 +116,7 @@ for sh in bash zsh; do
 	start "$(command -v $sh)" new-session -d -s scratch
 	t run-shell "$D/plugins/tmux-resurrect/scripts/restore.sh"
 	until_ok ran 0 && until_ok ran 1 && until_ok ran 2 || bad "$sh: nothing asked, but a command didn't run"
+	until_ok 3 settled main:0.0 main:0.1 main:0.2
 	check "$sh: nothing asked, nothing left waiting" "" "$(pending main:0.0)$(pending main:0.1)$(pending main:0.2)"
 	stop
 	rm -f "$D"/ran.*
@@ -136,6 +139,7 @@ for sh in bash zsh; do
 	t send-keys -t main:0.0 Enter
 	until_ok ran 0 || bad "$sh: answered, the command didn't run"
 	check "$sh: answered, the question got the answer" "secret" "$(cat "$D/answers" 2> /dev/null)"
+	until_ok 3 settled main:0.0
 	check "$sh: answered, no longer waiting" "" "$(pending main:0.0)"
 	sleep 1
 	check "$sh: the panes not answered still wait" "0" "$(ran_list)"
