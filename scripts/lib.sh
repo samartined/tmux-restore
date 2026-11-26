@@ -7,6 +7,11 @@
 PROC=${TMUX_RESTORE_PROC:-/proc}
 if [[ -n ${TMUX_RESTORE_PROC:-} || -r /proc/self/cmdline ]]; then HAVE_PROCFS=1; else HAVE_PROCFS=""; fi
 
+# pgrep, finding its caller and the caller's ancestors too. macOS's (and the BSDs') pgrep leaves
+# them out unless given -a, and a save run from inside a Claude Code (its shell tool) must still
+# find that Claude. Linux's pgrep leaves out only itself, and its -a means something else.
+if [[ $(uname -s) == Linux ]]; then PGREP=(pgrep); else PGREP=(pgrep -a); fi
+
 # is_uuid ID: ID is a UUID, the form Claude Code and Gemini CLI give their conversations' ids.
 # An id read from an agent's files goes into a command that runs at restore, so an adapter takes
 # nothing else (the security review's finding 2).
@@ -78,7 +83,7 @@ proc_children() {
 	if [[ -n $HAVE_PROCFS ]] && compgen -G "$PROC/$1/task/*/children" > /dev/null; then
 		cat "$PROC/$1"/task/*/children 2> /dev/null | tr ' ' '\n' | grep -v '^$'
 	else
-		pgrep -P "$1" 2>/dev/null
+		"${PGREP[@]}" -P "$1" 2> /dev/null
 	fi
 	return 0
 }
@@ -170,7 +175,7 @@ procs_named() {
 			[[ $comm == "$1" ]] && { f=${f%/comm}; printf '%s\n' "${f##*/}"; }
 		done
 	else
-		pgrep -x "$1" 2> /dev/null
+		"${PGREP[@]}" -x "$1" 2> /dev/null
 	fi
 	return 0
 }
