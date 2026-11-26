@@ -1,5 +1,8 @@
 [Unit]
 Description=Save tmux sessions before shutdown and reboot (tmux-restore)
+# After 5 failures in 5 minutes, stay failed instead of restarting forever
+StartLimitIntervalSec=300
+StartLimitBurst=5
 
 [Service]
 # install.sh points this at the plugin's real location

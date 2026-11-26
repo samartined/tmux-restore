@@ -131,6 +131,7 @@ ok "[$scenario] re-run updates the plugin without a warning" "! grep -q \"couldn
 if [[ $scenario == fresh ]]; then
 	if [[ $OS == Linux ]]; then
 		ok "[fresh] unit written with the plugin's path" "grep -q '^ExecStart=\"$P/tmux-restore/scripts/shutdown-save.sh\"$' ~/.config/systemd/user/tmux-restore.service"
+		ok "[fresh] unit stops retrying after 5 failures in 5 minutes" "grep -q '^StartLimitIntervalSec=300$' ~/.config/systemd/user/tmux-restore.service && grep -q '^StartLimitBurst=5$' ~/.config/systemd/user/tmux-restore.service"
 		ok "[fresh] unit enabled and started" "grep -q '^--user enable -q tmux-restore.service$' ~/systemctl.log && grep -q '^--user restart tmux-restore.service$' ~/systemctl.log"
 		ok "[fresh] gdbus installed (shutdown save)" "command -v gdbus > /dev/null"
 		ok "[fresh] periodic save unit runs save-now.sh --periodic" "grep -q '^ExecStart=\"$P/tmux-restore/scripts/save-now.sh\" --periodic$' ~/.config/systemd/user/tmux-restore-save.service"
