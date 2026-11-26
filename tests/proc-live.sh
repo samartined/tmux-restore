@@ -50,6 +50,10 @@ check "proc_cwd (with a space)" "$D/work dir" "$(proc_cwd "$agent")"
 check "proc_ppid" "$$" "$(proc_ppid "$agent")"
 check "proc_children" yes "$(yes_no grep -qx "$agent" <(proc_children $$))"
 check "procs_named" yes "$(yes_no grep -qx "$agent" <(procs_named codex))"
+# macOS's pgrep leaves out its caller and the caller's ancestors: a save run from inside a Claude
+# Code (its shell tool) must still find that Claude among the pane's processes, and by name
+check "proc_children: the caller's own ancestor" yes "$(me=$BASHPID; proc_children $$ | grep -qx "$me" && echo yes || echo no)"
+check "procs_named: the caller's own ancestor" yes "$(yes_no grep -qx "$$" <(procs_named "$(proc_comm $$)"))"
 check "proc_open_files" yes "$(yes_no grep -qxF "$rollout" <(proc_open_files "$agent"))"
 started=$(proc_start_epoch "$agent")
 check "proc_start_epoch" yes "$( ((started >= start - 2 && started <= $(date +%s) + 1)) && echo yes || echo "no ($started, started at $start)")"
