@@ -20,6 +20,8 @@ agent can follow it step by step.
 | Session and window names lose `'` `"` `` ` `` `$` `\` `;` `&` `\|` `<` `>` `(` `)` in saves, old saves included | tmux-resurrect puts the session name into a command it runs through the shell to show a pane's saved contents, which this fork turns on: a name with them could run code at restore | Not proposed yet. The cause is in tmux-resurrect |
 | Conversation ids from Gemini CLI, opencode and Claude Code are taken only in their own form, and quoted | An id from the agent's files went as it was into the command typed at restore | Not proposed yet |
 | On macOS, process start times are read in English and UTC, and Claude Code's registry counts only when its start time is the process's | ps wrote the date in the user's language, which the parser didn't read: on a Mac in Spanish, say, Codex, Gemini CLI and opencode found no conversation. And without the check, after a reboot an old registry entry could name a new process with the same pid | Not proposed yet |
+| On macOS, the process helpers find the caller's own ancestors too (`pgrep -a`) | macOS's pgrep leaves them out: a save run from inside a Claude Code didn't see that Claude in its pane, and saved it as a typed command | Not proposed yet |
+| The shutdown-save unit (`tmux-restore.service`) stops restarting after 5 failures in 5 minutes | With `Restart=on-failure` and no limit, a unit that kept failing restarted for days without anyone noticing; a failed unit can be watched | Not proposed yet |
 | The save folder is made 700 before the first save, and the saves 600 after every save | Every pane's command line and screen were readable by others until the hook first ran, and the files always | Not proposed yet |
 | `tmux.service` (`@continuum-boot`) saves as it stops only when you stop it yourself: a drop-in points its save at `scripts/stop-save.sh` | At shutdown that save came once the server was gone: empty, and in the same second as the save before shutdown it deleted that one. `last` pointed at nothing and nothing was restored | Fork only (the boot unit is continuum's, turned on by this fork) |
 | tmux starts at boot on Linux (`@continuum-boot`), and `--uninstall` turns that off again | After a power cut everything comes back with nobody logging in | Fork only |
@@ -29,6 +31,7 @@ agent can follow it step by step.
 
 | Tag | Upstream base | Notes |
 |---|---|---|
+| `fork.14` | `94c8488` | macOS: a save run from inside a Claude Code finds it; the shutdown-save unit stops retrying after 5 failures in 5 minutes |
 | `fork.13` | `94c8488` | macOS: start times read in any language, Claude Code's registry checked by them; the tests pass on a real Mac (macOS 27, Apple silicon) |
 | `fork.12` | `94c8488` | fixes from a security review: session and window names safe for the shell, conversation ids checked and quoted, saves readable by you only |
 | `fork.11` | `94c8488` | at shutdown `tmux.service` doesn't save a second time, which could delete the first save and leave nothing to restore; a broken `last` is mended before any restore |
