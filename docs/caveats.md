@@ -128,6 +128,12 @@ folder when that trust wasn't saved, and waits there, out of reach of the Claude
 A `--add-dir` folder that no longer exists (one in `/tmp`, after a reboot) doesn't stop the
 session.
 
+**Claude Code with another account.** A restored Claude Code runs with whichever Claude account is
+signed in when tmux starts. If that isn't the account its Remote Control session belongs to, it
+opens a new Remote Control session, which the Claude app shows without the earlier messages, and
+switching back later opens yet another. The conversation itself is intact: the pane has all of it.
+Sign in to the right account before you start tmux.
+
 **One tmux server, on the default socket.** The 5-minute save and the save at shutdown run
 `tmux` outside tmux, so they reach the server on the default socket. A server started with
 `-L`/`-S`, or with `TMUX_TMPDIR` set in your shell only, isn't saved by them.
